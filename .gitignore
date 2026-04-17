@@ -109,3 +109,8 @@ htmlcov/
 # ==============================
 *.sqlite3
 *.db
+
+data/raw/.gitkeep
+data/processed/.gitkeep
+models/.gitkeep
+notebooks/.gitkeep
