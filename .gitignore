@@ -1,0 +1,111 @@
+# ==============================
+# 🐍 Python
+# ==============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==============================
+# 🧪 Virtual Environments
+# ==============================
+venv/
+env/
+ENV/
+.venv/
+
+# ==============================
+# 📓 Jupyter Notebook
+# ==============================
+.ipynb_checkpoints/
+
+# ==============================
+# 🧾 Logs & Temporary Files
+# ==============================
+*.log
+*.tmp
+*.temp
+*.swp
+*.bak
+
+# ==============================
+# 💻 OS Files
+# ==============================
+.DS_Store
+Thumbs.db
+
+# ==============================
+# 🔐 Environment & Secrets
+# ==============================
+.env
+.env.*
+*.env
+
+# ==============================
+# 📊 Data Files (IMPORTANT)
+# ==============================
+# Raw and large datasets (keep structure, not data)
+data/raw/*
+data/processed/*
+
+# But keep folder structure
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# ==============================
+# 📈 Outputs (plots, reports)
+# ==============================
+outputs/*
+!outputs/.gitkeep
+
+# ==============================
+# 🧠 Model Files (future ML)
+# ==============================
+*.pkl
+*.joblib
+*.h5
+*.model
+
+# ==============================
+# 📦 IDE / Editor Settings
+# ==============================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ==============================
+# 🧪 Testing / Coverage
+# ==============================
+.coverage
+coverage.xml
+htmlcov/
+
+# ==============================
+# ⚙️ Cache Files
+# ==============================
+.cache/
+*.cache
+
+# ==============================
+# 🧬 Misc
+# ==============================
+*.sqlite3
+*.db

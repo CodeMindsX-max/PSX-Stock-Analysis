@@ -1,0 +1,82 @@
+Step 1: Inspect website
+
+Example: Go to
+Investing.com → PSX stock page
+
+Find table with historical data
+Right click → Inspect
+
+ 
+
+
+Step 2: Write Python script
+
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+url = "YOUR_TARGET_URL_HERE"
+
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+response = requests.get(url, headers=headers)
+soup = BeautifulSoup(response.text, "html.parser")
+
+table = soup.find("table")
+
+rows = table.find_all("tr")
+
+data = []
+
+for row in rows:
+    cols = row.find_all("td")
+    cols = [col.text.strip() for col in cols]
+    if cols:
+        data.append(cols)
+
+df = pd.DataFrame(data)
+df.to_csv("psx_data.csv", index=False)
+
+print("Data saved!")
+
+Step 3: Clean Data
+
+Use:
+
+Pandas
+
+Tasks:
+
+Convert strings → float
+Format dates
+Remove duplicates
+
+
+step 4: Automate Daily Collection
+
+
+Use:
+
+Task Scheduler (Windows)
+Cron jobs (Linux)
+
+Run your script daily → build dataset over time
+
+
+
+
+Phase 1 (Now)
+Pick 2–3 stocks (e.g., banking, oil)
+Download historical data manually
+Phase 2
+Build scraping script
+Collect 1–2 years of data
+Phase 3
+Add indicators:
+Moving Average
+RSI
+Volume trends
+Phase 4
+Feed into ML model
