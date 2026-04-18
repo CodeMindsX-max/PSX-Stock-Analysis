@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSX AI Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: "#04111d",
+                        panel: "#0b1c2e",
+                        panelSoft: "#10253a",
+                        sky: "#38bdf8",
+                        mint: "#34d399",
+                        ember: "#f59e0b",
+                        coral: "#fb7185",
+                    },
+                    fontFamily: {
+                        display: ["Space Grotesk", "sans-serif"],
+                        body: ["IBM Plex Sans", "sans-serif"],
+                    },
+                    boxShadow: {
+                        panel: "0 18px 60px rgba(4, 17, 29, 0.38)",
+                    },
+                },
+            },
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        @media (min-width: 1024px) {
+            html,
+            body {
+                height: 100%;
+                overflow: hidden;
+            }
+        }
+
+        body {
+            background:
+                radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 28%),
+                radial-gradient(circle at top right, rgba(245, 158, 11, 0.14), transparent 30%),
+                linear-gradient(180deg, #04111d 0%, #081726 45%, #0b1c2e 100%);
+        }
+
+        .glass {
+            background: linear-gradient(180deg, rgba(16, 37, 58, 0.9), rgba(9, 24, 39, 0.82));
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            box-shadow: 0 18px 60px rgba(4, 17, 29, 0.38);
+            backdrop-filter: blur(18px);
+        }
+
+        .mesh {
+            background-image:
+                linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+            background-size: 36px 36px;
+            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 92%);
+        }
+
+        .panel-scroll::-webkit-scrollbar,
+        .data-scroll::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        .panel-scroll::-webkit-scrollbar-thumb,
+        .data-scroll::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.26);
+            border-radius: 999px;
+        }
+
+        .panel-scroll,
+        .data-scroll {
+            scrollbar-color: rgba(56, 189, 248, 0.26) transparent;
+        }
+
+        .metric-value {
+            font-size: clamp(1.5rem, 2vw, 2.15rem);
+        }
+
+        @media (min-width: 1024px) and (max-height: 840px) {
+            .compact-gap {
+                gap: 0.75rem;
+            }
+
+            .compact-card {
+                padding: 0.95rem;
+            }
+
+            .compact-card-title {
+                margin-top: 0.5rem;
+            }
+
+            .compact-chart-space {
+                margin-top: 0.75rem;
+            }
+
+            .compact-nav {
+                padding-top: 0.95rem;
+                padding-bottom: 0.95rem;
+            }
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden font-body text-slate-100 antialiased lg:overflow-hidden">
+    <div class="pointer-events-none fixed inset-0 mesh opacity-40"></div>
+
+    <div class="relative mx-auto max-w-[1500px] px-3 py-3 sm:px-4 sm:py-4 lg:h-screen lg:px-5 lg:py-4">
+        <div class="compact-gap flex min-h-screen flex-col gap-3 lg:h-[calc(100vh-2rem)] lg:min-h-0 lg:min-h-[700px]">
+            <nav class="glass compact-nav shrink-0 rounded-[1.6rem] px-4 py-4 sm:px-5 lg:px-6">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:gap-6">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky/30 via-sky/10 to-transparent ring-1 ring-sky/20">
+                                <span class="font-display text-lg text-sky">PSX</span>
+                            </div>
+                            <div>
+                                <p class="text-[11px] uppercase tracking-[0.28em] text-sky/80">Flask Prediction Desk</p>
+                                <h1 class="mt-1 font-display text-xl text-white sm:text-2xl">PSX AI Live Dashboard</h1>
+                                <p class="mt-1 text-xs text-slate-400 sm:text-sm">Laptop-first layout with live model signal, trends, and compact panels.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span id="apiStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">API status pending</span>
+                            <span id="modelStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Model pending</span>
+                            <span id="dataStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Data pending</span>
+                            <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300">Auto refresh 30s</span>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-3 lg:min-w-[24rem] lg:max-w-[31rem]">
+                        <div>
+                            <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">System Sync</p>
+                            <p id="lastUpdated" class="mt-1 text-sm font-semibold text-white sm:text-base">Waiting for first update</p>
+                            <div class="mt-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.22em] text-slate-400">
+                                <span>Next refresh</span>
+                                <span id="refreshCountdown">30s</span>
+                            </div>
+                            <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/5">
+                                <div id="refreshBar" class="h-full w-full rounded-full bg-gradient-to-r from-mint via-sky to-ember transition-all duration-1000"></div>
+                            </div>
+                        </div>
+
+                        <div class="grid gap-2 sm:grid-cols-3">
+                            <button id="refreshButton" class="rounded-2xl border border-sky/20 bg-sky px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky/90">
+                                Refresh
+                            </button>
+                            <button id="runPipelineButton" class="rounded-2xl border border-mint/20 bg-mint/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-mint/20">
+                                Fetch Live
+                            </button>
+                            <button id="manageFilesButton" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/10">
+                                Files
+                            </button>
+                        </div>
+                        <p id="pipelineMessage" class="text-xs text-slate-300">Live pipeline is idle.</p>
+                    </div>
+                </div>
+            </nav>
+
+            <main class="compact-gap flex flex-1 flex-col gap-3 lg:min-h-0">
+                <section class="compact-gap grid shrink-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <article class="glass compact-card rounded-[1.5rem] p-4 sm:p-5">
+                        <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Live Prediction</p>
+                        <div class="compact-card-title mt-3 flex items-start justify-between gap-3">
+                            <div>
+                                <p id="predictionLabel" class="metric-value font-display text-white">Loading</p>
+                                <p id="predictionDate" class="mt-2 text-xs text-slate-300 sm:text-sm">Preparing latest row</p>
+                            </div>
+                            <span id="predictionBadge" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-slate-200">Pending</span>
+                        </div>
+                    </article>
+
+                    <article class="glass compact-card rounded-[1.5rem] p-4 sm:p-5">
+                        <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Latest Close</p>
+                        <p id="latestClose" class="compact-card-title metric-value mt-3 font-display text-white">--</p>
+                        <p id="latestVolume" class="mt-2 text-xs text-slate-300 sm:text-sm">Volume: --</p>
+                    </article>
+
+                    <article class="glass compact-card rounded-[1.5rem] p-4 sm:p-5">
+                        <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Average Return</p>
+                        <p id="averageReturn" class="compact-card-title metric-value mt-3 font-display text-white">--</p>
+                        <p class="mt-2 text-xs text-slate-300 sm:text-sm">Snapshot from processed feature history.</p>
+                    </article>
+
+                    <article class="glass compact-card rounded-[1.5rem] p-4 sm:p-5">
+                        <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Average Volatility</p>
+                        <p id="averageVolatility" class="compact-card-title metric-value mt-3 font-display text-white">--</p>
+                        <p class="mt-2 text-xs text-slate-300 sm:text-sm">Seven-session volatility baseline.</p>
+                    </article>
+                </section>
+
+                <section class="compact-gap grid flex-1 gap-3 lg:min-h-0 lg:grid-cols-[1.08fr_0.92fr]">
+                    <div class="compact-gap grid gap-3 lg:min-h-0 lg:grid-rows-[minmax(0,0.96fr)_minmax(0,1.04fr)]">
+                        <article class="glass compact-card flex min-h-[250px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Direction Trend</p>
+                                    <h2 class="mt-1 font-display text-lg text-white sm:text-xl">Recent up and down flow</h2>
+                                </div>
+                                <p class="max-w-sm text-xs leading-6 text-slate-300 sm:text-sm">
+                                    The newest point switches to the live prediction when the last row is still unlabeled.
+                                </p>
+                            </div>
+                            <div class="compact-chart-space mt-4 min-h-[180px] flex-1 lg:min-h-0">
+                                <canvas id="directionChart"></canvas>
+                            </div>
+                        </article>
+
+                        <article class="glass compact-card flex min-h-[260px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Recent Sessions</p>
+                                    <h2 class="mt-1 font-display text-lg text-white sm:text-xl">Processed market records</h2>
+                                </div>
+                                <p class="max-w-sm text-xs leading-6 text-slate-300 sm:text-sm">
+                                    This panel scrolls internally so the whole dashboard stays on one screen on laptop.
+                                </p>
+                            </div>
+
+                            <div class="data-scroll mt-4 flex-1 overflow-auto rounded-[1.25rem] border border-white/10 bg-slate-950/30">
+                                <table class="min-w-full divide-y divide-white/10 text-left text-sm">
+                                    <thead class="sticky top-0 bg-slate-950/90 text-[11px] uppercase tracking-[0.22em] text-slate-400 backdrop-blur">
+                                        <tr>
+                                            <th class="px-4 py-3">Date</th>
+                                            <th class="px-4 py-3">Close</th>
+                                            <th class="px-4 py-3">Return</th>
+                                            <th class="px-4 py-3">Volume</th>
+                                            <th class="px-4 py-3">Volatility</th>
+                                            <th class="px-4 py-3">Direction</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tableBody" class="divide-y divide-white/5 text-slate-200"></tbody>
+                                </table>
+                            </div>
+                        </article>
+                    </div>
+
+                    <div class="compact-gap grid gap-3 lg:min-h-0 lg:grid-rows-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                        <article class="glass compact-card flex min-h-[250px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
+                            <div class="flex items-end justify-between gap-3">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Market Structure</p>
+                                    <h2 class="mt-1 font-display text-lg text-white sm:text-xl">Close versus volume</h2>
+                                </div>
+                                <span class="rounded-full border border-ember/20 bg-ember/10 px-3 py-1 text-[11px] font-semibold text-amber-200">Recent sessions</span>
+                            </div>
+                            <div class="compact-chart-space mt-4 min-h-[180px] flex-1 lg:min-h-0">
+                                <canvas id="priceChart"></canvas>
+                            </div>
+                        </article>
+
+                        <article class="glass compact-card flex min-h-[260px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
+                            <div class="flex items-end justify-between gap-3">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Feature Snapshot</p>
+                                    <h2 class="mt-1 font-display text-lg text-white sm:text-xl">Latest row for prediction</h2>
+                                </div>
+                                <span id="snapshotDate" class="text-xs text-slate-300 sm:text-sm">--</span>
+                            </div>
+                            <div id="snapshotGrid" class="panel-scroll mt-4 grid flex-1 auto-rows-fr gap-3 overflow-auto sm:grid-cols-2 lg:min-h-0 xl:grid-cols-3"></div>
+                        </article>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <div id="fileManagerModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/72 p-4 backdrop-blur-sm">
+        <div class="glass flex h-[min(88vh,760px)] w-full max-w-6xl flex-col rounded-[1.75rem]">
+            <div class="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-6">
+                <div>
+                    <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">File Manager</p>
+                    <h2 class="mt-1 font-display text-xl text-white">Raw, processed, and model artifacts</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="refreshFilesButton" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">
+                        Refresh Files
+                    </button>
+                    <button id="closeFilesButton" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">
+                        Close
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid flex-1 gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:grid-cols-[0.95fr_1.05fr]">
+                <div class="panel-scroll overflow-auto rounded-[1.25rem] border border-white/10 bg-slate-950/30 p-3">
+                    <div id="fileSections" class="space-y-4"></div>
+                </div>
+
+                <div class="panel-scroll overflow-auto rounded-[1.25rem] border border-white/10 bg-slate-950/30 p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Preview</p>
+                            <h3 id="previewTitle" class="mt-1 text-lg font-semibold text-white">Select a file</h3>
+                        </div>
+                        <span id="previewMeta" class="text-xs text-slate-400"></span>
+                    </div>
+                    <div id="previewBody" class="mt-4 text-sm text-slate-300">
+                        Choose a file from the left to preview it here.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const REFRESH_SECONDS = 30;
+        let secondsUntilRefresh = REFRESH_SECONDS;
+        let directionChart = null;
+        let priceChart = null;
+        let refreshInProgress = false;
+
+        const chartTextColor = "#cbd5e1";
+        const chartGridColor = "rgba(148, 163, 184, 0.12)";
+
+        const elements = {
+            refreshButton: document.getElementById("refreshButton"),
+            runPipelineButton: document.getElementById("runPipelineButton"),
+            manageFilesButton: document.getElementById("manageFilesButton"),
+            closeFilesButton: document.getElementById("closeFilesButton"),
+            refreshFilesButton: document.getElementById("refreshFilesButton"),
+            refreshCountdown: document.getElementById("refreshCountdown"),
+            refreshBar: document.getElementById("refreshBar"),
+            lastUpdated: document.getElementById("lastUpdated"),
+            pipelineMessage: document.getElementById("pipelineMessage"),
+            apiStatus: document.getElementById("apiStatus"),
+            modelStatus: document.getElementById("modelStatus"),
+            dataStatus: document.getElementById("dataStatus"),
+            predictionLabel: document.getElementById("predictionLabel"),
+            predictionDate: document.getElementById("predictionDate"),
+            predictionBadge: document.getElementById("predictionBadge"),
+            latestClose: document.getElementById("latestClose"),
+            latestVolume: document.getElementById("latestVolume"),
+            averageReturn: document.getElementById("averageReturn"),
+            averageVolatility: document.getElementById("averageVolatility"),
+            snapshotDate: document.getElementById("snapshotDate"),
+            snapshotGrid: document.getElementById("snapshotGrid"),
+            tableBody: document.getElementById("tableBody"),
+            fileManagerModal: document.getElementById("fileManagerModal"),
+            fileSections: document.getElementById("fileSections"),
+            previewTitle: document.getElementById("previewTitle"),
+            previewMeta: document.getElementById("previewMeta"),
+            previewBody: document.getElementById("previewBody"),
+        };
+
+        function formatNumber(value, maximumFractionDigits = 2) {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                return "--";
+            }
+
+            return new Intl.NumberFormat("en-US", {
+                maximumFractionDigits,
+            }).format(Number(value));
+        }
+
+        function formatCompactNumber(value) {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                return "--";
+            }
+
+            return new Intl.NumberFormat("en-US", {
+                notation: "compact",
+                maximumFractionDigits: 2,
+            }).format(Number(value));
+        }
+
+        function formatPercent(value) {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                return "--";
+            }
+
+            return `${(Number(value) * 100).toFixed(2)}%`;
+        }
+
+        function formatLocalTimestamp(date = new Date()) {
+            return new Intl.DateTimeFormat("en-US", {
+                dateStyle: "medium",
+                timeStyle: "medium",
+            }).format(date);
+        }
+
+        function setStatusChip(element, isReady, readyLabel, pendingLabel) {
+            element.textContent = isReady ? readyLabel : pendingLabel;
+            element.className = [
+                "rounded-full border px-3 py-1.5 text-xs font-medium",
+                isReady
+                    ? "border-mint/20 bg-mint/10 text-emerald-200"
+                    : "border-coral/20 bg-coral/10 text-rose-200",
+            ].join(" ");
+        }
+
+        async function fetchJson(path) {
+            const response = await fetch(path, { cache: "no-store" });
+            const payload = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(payload.error || `Request failed for ${path}`);
+            }
+
+            return payload;
+        }
+
+        async function postJson(path, payload = {}) {
+            const response = await fetch(path, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+            });
+            const body = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(body.error || `Request failed for ${path}`);
+            }
+
+            return body;
+        }
+
+        function buildTrendSeries(rows, predictionPayload) {
+            return rows.map((row, index) => {
+                let value = row.Target;
+                let forecast = false;
+
+                if ((value === null || value === undefined || value === "") && index === rows.length - 1) {
+                    value = predictionPayload.prediction_value;
+                    forecast = true;
+                }
+
+                if (value === null || value === undefined || value === "") {
+                    return null;
+                }
+
+                return {
+                    label: forecast ? `${row.Date} forecast` : row.Date,
+                    value: Number(value),
+                    forecast,
+                };
+            }).filter(Boolean);
+        }
+
+        function createOrUpdateDirectionChart(rows, predictionPayload) {
+            const series = buildTrendSeries(rows, predictionPayload);
+            const labels = series.map((item) => item.label);
+            const values = series.map((item) => item.value);
+            const pointBackgroundColor = series.map((item) => item.value === 1 ? "#34d399" : "#fb7185");
+            const pointBorderColor = series.map((item) => item.forecast ? "#f59e0b" : "#f8fafc");
+            const pointRadius = series.map((item) => item.forecast ? 6 : 4);
+
+            const data = {
+                labels,
+                datasets: [{
+                    label: "Direction",
+                    data: values,
+                    stepped: true,
+                    tension: 0,
+                    borderWidth: 3,
+                    borderColor: "#38bdf8",
+                    backgroundColor: "rgba(56, 189, 248, 0.08)",
+                    fill: true,
+                    pointBackgroundColor,
+                    pointBorderColor,
+                    pointBorderWidth: 2,
+                    pointRadius,
+                }],
+            };
+
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: chartTextColor,
+                        },
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label(context) {
+                                const item = series[context.dataIndex];
+                                const direction = context.raw === 1 ? "UP" : "DOWN";
+                                return `${item.forecast ? "Forecast" : "Historical"} ${direction}`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: chartTextColor,
+                            maxRotation: 0,
+                            autoSkip: true,
+                        },
+                        grid: {
+                            color: chartGridColor,
+                        },
+                    },
+                    y: {
+                        min: 0,
+                        max: 1,
+                        ticks: {
+                            color: chartTextColor,
+                            stepSize: 1,
+                            callback(value) {
+                                return Number(value) === 1 ? "UP" : "DOWN";
+                            },
+                        },
+                        grid: {
+                            color: chartGridColor,
+                        },
+                    },
+                },
+            };
+
+            if (directionChart) {
+                directionChart.data = data;
+                directionChart.options = options;
+                directionChart.update();
+                return;
+            }
+
+            directionChart = new Chart(document.getElementById("directionChart"), {
+                type: "line",
+                data,
+                options,
+            });
+        }
+
+        function createOrUpdatePriceChart(rows) {
+            const labels = rows.map((row) => row.Date);
+            const closeData = rows.map((row) => Number(row.Close));
+            const volumeData = rows.map((row) => Number(row.Volume));
+
+            const data = {
+                labels,
+                datasets: [
+                    {
+                        type: "line",
+                        label: "Close",
+                        data: closeData,
+                        borderColor: "#f8fafc",
+                        backgroundColor: "rgba(248, 250, 252, 0.08)",
+                        pointBackgroundColor: "#38bdf8",
+                        pointBorderColor: "#f8fafc",
+                        pointBorderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.35,
+                        fill: true,
+                        yAxisID: "priceAxis",
+                    },
+                    {
+                        type: "bar",
+                        label: "Volume",
+                        data: volumeData,
+                        backgroundColor: "rgba(245, 158, 11, 0.28)",
+                        borderRadius: 10,
+                        yAxisID: "volumeAxis",
+                    },
+                ],
+            };
+
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: chartTextColor,
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: chartTextColor,
+                            maxRotation: 0,
+                            autoSkip: true,
+                        },
+                        grid: {
+                            display: false,
+                        },
+                    },
+                    priceAxis: {
+                        position: "left",
+                        ticks: {
+                            color: chartTextColor,
+                            callback(value) {
+                                return formatCompactNumber(value);
+                            },
+                        },
+                        grid: {
+                            color: chartGridColor,
+                        },
+                    },
+                    volumeAxis: {
+                        position: "right",
+                        ticks: {
+                            color: chartTextColor,
+                            callback(value) {
+                                return formatCompactNumber(value);
+                            },
+                        },
+                        grid: {
+                            display: false,
+                        },
+                    },
+                },
+            };
+
+            if (priceChart) {
+                priceChart.data = data;
+                priceChart.options = options;
+                priceChart.update();
+                return;
+            }
+
+            priceChart = new Chart(document.getElementById("priceChart"), {
+                data,
+                options,
+            });
+        }
+
+        function renderSnapshotGrid(predictionPayload) {
+            const latestFeatures = predictionPayload.latest_features || {};
+            const rows = [
+                ["Open", formatNumber(latestFeatures.Open)],
+                ["High", formatNumber(latestFeatures.High)],
+                ["Low", formatNumber(latestFeatures.Low)],
+                ["Close", formatNumber(latestFeatures.Close)],
+                ["Volume", formatCompactNumber(latestFeatures.Volume)],
+                ["Return", formatPercent(latestFeatures.Return)],
+                ["MA 7", formatNumber(latestFeatures.MA_7)],
+                ["MA 30", formatNumber(latestFeatures.MA_30)],
+                ["Volatility", formatNumber(latestFeatures.Volatility)],
+            ];
+
+            elements.snapshotDate.textContent = predictionPayload.latest_row_date || "--";
+            elements.snapshotGrid.innerHTML = rows.map(([label, value]) => `
+                <div class="rounded-[1.05rem] border border-white/10 bg-white/5 p-3">
+                    <p class="text-[11px] uppercase tracking-[0.22em] text-slate-400">${label}</p>
+                    <p class="mt-2 text-sm font-semibold text-white sm:text-base">${value}</p>
+                </div>
+            `).join("");
+        }
+
+        function renderTable(rows, predictionPayload) {
+            elements.tableBody.innerHTML = rows.map((row, index) => {
+                let directionLabel = "--";
+                let badgeClass = "border-white/10 bg-white/5 text-slate-200";
+
+                if (row.Target === 1) {
+                    directionLabel = "UP";
+                    badgeClass = "border-mint/20 bg-mint/10 text-emerald-200";
+                } else if (row.Target === 0) {
+                    directionLabel = "DOWN";
+                    badgeClass = "border-coral/20 bg-coral/10 text-rose-200";
+                } else if (index === rows.length - 1) {
+                    directionLabel = `${predictionPayload.prediction} forecast`;
+                    badgeClass = "border-ember/20 bg-ember/10 text-amber-200";
+                }
+
+                return `
+                    <tr class="hover:bg-white/[0.03]">
+                        <td class="px-4 py-3 text-xs font-medium text-white sm:text-sm">${row.Date || "--"}</td>
+                        <td class="px-4 py-3 text-xs sm:text-sm">${formatNumber(row.Close)}</td>
+                        <td class="px-4 py-3 text-xs sm:text-sm">${formatPercent(row.Return)}</td>
+                        <td class="px-4 py-3 text-xs sm:text-sm">${formatCompactNumber(row.Volume)}</td>
+                        <td class="px-4 py-3 text-xs sm:text-sm">${formatNumber(row.Volatility)}</td>
+                        <td class="px-4 py-3">
+                            <span class="rounded-full border px-3 py-1 text-[11px] font-semibold ${badgeClass}">
+                                ${directionLabel}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function updateSummaryCards(healthPayload, predictionPayload, insightsPayload, rows) {
+            const latestFeatures = predictionPayload.latest_features || {};
+            const predictionIsUp = predictionPayload.prediction === "UP";
+
+            setStatusChip(elements.apiStatus, true, "API online", "API offline");
+            setStatusChip(elements.modelStatus, Boolean(healthPayload.model_ready), "Model ready", "Model missing");
+            setStatusChip(elements.dataStatus, Boolean(healthPayload.data_ready), "Data ready", "Data missing");
+
+            elements.predictionLabel.textContent = predictionPayload.prediction || "Unavailable";
+            elements.predictionDate.textContent = predictionPayload.latest_row_date
+                ? `Latest session: ${predictionPayload.latest_row_date}`
+                : "Latest session unavailable";
+            elements.predictionBadge.textContent = predictionIsUp ? "Bullish signal" : "Bearish signal";
+            elements.predictionBadge.className = [
+                "rounded-full border px-3 py-1.5 text-[11px] font-semibold",
+                predictionIsUp
+                    ? "border-mint/20 bg-mint/10 text-emerald-200"
+                    : "border-coral/20 bg-coral/10 text-rose-200",
+            ].join(" ");
+
+            elements.latestClose.textContent = formatNumber(latestFeatures.Close);
+            elements.latestVolume.textContent = `Volume: ${formatCompactNumber(latestFeatures.Volume)}`;
+            elements.averageReturn.textContent = formatPercent(insightsPayload.average_return);
+            elements.averageVolatility.textContent = formatNumber(insightsPayload.average_volatility);
+
+            if (!healthPayload.model_ready || !healthPayload.data_ready) {
+                setStatusChip(elements.apiStatus, false, "API online", "API warning");
+            }
+
+            if (!rows.length) {
+                elements.latestClose.textContent = "--";
+                elements.latestVolume.textContent = "Volume: --";
+            }
+
+            if (Array.isArray(healthPayload.warnings) && healthPayload.warnings.length) {
+                elements.pipelineMessage.textContent = healthPayload.warnings[0];
+            }
+        }
+
+        function openFileManager() {
+            elements.fileManagerModal.classList.remove("hidden");
+            elements.fileManagerModal.classList.add("flex");
+        }
+
+        function closeFileManager() {
+            elements.fileManagerModal.classList.add("hidden");
+            elements.fileManagerModal.classList.remove("flex");
+        }
+
+        function formatFileSize(sizeBytes) {
+            const size = Number(sizeBytes);
+            if (Number.isNaN(size)) {
+                return "--";
+            }
+
+            if (size < 1024) {
+                return `${size} B`;
+            }
+            if (size < 1024 * 1024) {
+                return `${(size / 1024).toFixed(1)} KB`;
+            }
+            return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+        }
+
+        async function loadFiles() {
+            try {
+                const payload = await fetchJson("/api/files");
+                renderFileSections(payload);
+            } catch (error) {
+                console.error(error);
+                elements.fileSections.innerHTML = `<p class="text-sm text-rose-200">${error.message}</p>`;
+            }
+        }
+
+        function renderPreviewTable(columns, rows) {
+            const headerHtml = columns.map((column) => `
+                <th class="px-3 py-2 text-left text-[11px] uppercase tracking-[0.22em] text-slate-400">${column}</th>
+            `).join("");
+
+            const rowsHtml = rows.map((row) => `
+                <tr class="border-t border-white/5">
+                    ${columns.map((column) => `
+                        <td class="px-3 py-2 align-top text-xs text-slate-200">${row[column] ?? "--"}</td>
+                    `).join("")}
+                </tr>
+            `).join("");
+
+            return `
+                <div class="data-scroll overflow-auto rounded-[1rem] border border-white/10">
+                    <table class="min-w-full bg-slate-950/30">
+                        <thead class="bg-white/5"><tr>${headerHtml}</tr></thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function previewFile(category, filename) {
+            try {
+                const query = new URLSearchParams({ category, filename });
+                const preview = await fetchJson(`/api/files/preview?${query.toString()}`);
+                elements.previewTitle.textContent = preview.filename;
+                elements.previewMeta.textContent = preview.relative_path || "";
+
+                if (preview.preview_type === "table") {
+                    elements.previewBody.innerHTML = renderPreviewTable(preview.columns || [], preview.rows || []);
+                    return;
+                }
+
+                if (preview.preview_type === "pickle") {
+                    const items = [
+                        preview.keys ? `Keys: ${preview.keys.join(", ")}` : "",
+                        preview.feature_columns ? `Feature columns: ${preview.feature_columns.join(", ")}` : "",
+                        preview.metrics ? `Metrics: ${JSON.stringify(preview.metrics)}` : "",
+                    ].filter(Boolean);
+                    elements.previewBody.innerHTML = items.map((item) => `
+                        <div class="mb-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-200">${item}</div>
+                    `).join("");
+                    return;
+                }
+
+                elements.previewBody.innerHTML = `
+                    <pre class="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-slate-200">${preview.content || "No preview available."}</pre>
+                `;
+            } catch (error) {
+                console.error(error);
+                elements.previewBody.innerHTML = `<p class="text-sm text-rose-200">${error.message}</p>`;
+            }
+        }
+
+        async function deleteFile(category, filename) {
+            const confirmed = window.confirm(`Delete ${filename}?`);
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                await postJson("/api/files/delete", { category, filename });
+                await loadFiles();
+                elements.previewTitle.textContent = "Select a file";
+                elements.previewMeta.textContent = "";
+                elements.previewBody.innerHTML = "Choose a file from the left to preview it here.";
+            } catch (error) {
+                console.error(error);
+                window.alert(error.message);
+            }
+        }
+
+        function renderFileSections(payload) {
+            const categoryOrder = ["raw", "processed", "models"];
+            const html = categoryOrder.map((category) => {
+                const files = payload[category] || [];
+                const label = category.charAt(0).toUpperCase() + category.slice(1);
+
+                const filesHtml = files.length
+                    ? files.map((file) => `
+                        <div class="rounded-[1rem] border border-white/10 bg-white/5 p-3">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-semibold text-white">${file.filename}</p>
+                                    <p class="mt-1 text-xs text-slate-400">${formatFileSize(file.size_bytes)} • ${file.modified_at}</p>
+                                </div>
+                                <span class="rounded-full border px-2.5 py-1 text-[10px] font-semibold ${file.can_delete ? "border-ember/20 bg-ember/10 text-amber-200" : "border-mint/20 bg-mint/10 text-emerald-200"}">
+                                    ${file.can_delete ? "Archive" : "Protected"}
+                                </span>
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <button data-action="preview" data-category="${category}" data-filename="${file.filename}" class="rounded-lg border border-sky/20 bg-sky/10 px-3 py-1.5 text-xs font-semibold text-sky transition hover:bg-sky/20">
+                                    View
+                                </button>
+                                ${file.can_delete ? `
+                                    <button data-action="delete" data-category="${category}" data-filename="${file.filename}" class="rounded-lg border border-coral/20 bg-coral/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-coral/20">
+                                        Delete
+                                    </button>
+                                ` : ""}
+                            </div>
+                        </div>
+                    `).join("")
+                    : `<p class="text-sm text-slate-400">No files found.</p>`;
+
+                return `
+                    <section>
+                        <div class="mb-3 flex items-center justify-between gap-3">
+                            <h3 class="font-display text-lg text-white">${label}</h3>
+                            <span class="text-xs text-slate-400">${files.length} file(s)</span>
+                        </div>
+                        <div class="space-y-3">${filesHtml}</div>
+                    </section>
+                `;
+            }).join("");
+
+            elements.fileSections.innerHTML = html;
+
+            elements.fileSections.querySelectorAll("[data-action='preview']").forEach((button) => {
+                button.addEventListener("click", () => {
+                    previewFile(button.dataset.category, button.dataset.filename);
+                });
+            });
+
+            elements.fileSections.querySelectorAll("[data-action='delete']").forEach((button) => {
+                button.addEventListener("click", () => {
+                    deleteFile(button.dataset.category, button.dataset.filename);
+                });
+            });
+        }
+
+        async function runPipeline() {
+            try {
+                elements.runPipelineButton.disabled = true;
+                elements.runPipelineButton.classList.add("opacity-70");
+                elements.pipelineMessage.textContent = "Fetching live PSX data and rebuilding artifacts...";
+                const summary = await postJson("/api/pipeline/run");
+                elements.pipelineMessage.textContent = `Pipeline completed. Latest prediction date: ${summary.latest_prediction_date || "--"}`;
+                await Promise.all([loadDashboard(), loadFiles()]);
+            } catch (error) {
+                console.error(error);
+                elements.pipelineMessage.textContent = error.message;
+            } finally {
+                elements.runPipelineButton.disabled = false;
+                elements.runPipelineButton.classList.remove("opacity-70");
+            }
+        }
+
+        async function loadDashboard() {
+            if (refreshInProgress) {
+                return;
+            }
+
+            refreshInProgress = true;
+            elements.refreshButton.disabled = true;
+            elements.refreshButton.classList.add("opacity-70");
+
+            try {
+                const [healthPayload, predictionPayload, insightsPayload, rows] = await Promise.all([
+                    fetchJson("/health"),
+                    fetchJson("/predict"),
+                    fetchJson("/insights"),
+                    fetchJson("/data"),
+                ]);
+
+                updateSummaryCards(healthPayload, predictionPayload, insightsPayload, rows);
+                renderSnapshotGrid(predictionPayload);
+                renderTable(rows, predictionPayload);
+                createOrUpdateDirectionChart(rows, predictionPayload);
+                createOrUpdatePriceChart(rows);
+                elements.lastUpdated.textContent = formatLocalTimestamp();
+                setStatusChip(elements.apiStatus, true, "API online", "API offline");
+                secondsUntilRefresh = REFRESH_SECONDS;
+            } catch (error) {
+                console.error(error);
+                setStatusChip(elements.apiStatus, false, "API online", "API offline");
+                elements.lastUpdated.textContent = "Refresh failed";
+            } finally {
+                refreshInProgress = false;
+                elements.refreshButton.disabled = false;
+                elements.refreshButton.classList.remove("opacity-70");
+            }
+        }
+
+        function tickRefreshCountdown() {
+            elements.refreshCountdown.textContent = `${secondsUntilRefresh}s`;
+            elements.refreshBar.style.width = `${(secondsUntilRefresh / REFRESH_SECONDS) * 100}%`;
+
+            secondsUntilRefresh -= 1;
+            if (secondsUntilRefresh < 0) {
+                secondsUntilRefresh = REFRESH_SECONDS;
+                loadDashboard();
+            }
+        }
+
+        elements.refreshButton.addEventListener("click", () => {
+            secondsUntilRefresh = REFRESH_SECONDS;
+            loadDashboard();
+        });
+
+        elements.runPipelineButton.addEventListener("click", () => {
+            secondsUntilRefresh = REFRESH_SECONDS;
+            runPipeline();
+        });
+
+        elements.manageFilesButton.addEventListener("click", async () => {
+            openFileManager();
+            await loadFiles();
+        });
+
+        elements.closeFilesButton.addEventListener("click", closeFileManager);
+        elements.refreshFilesButton.addEventListener("click", loadFiles);
+        elements.fileManagerModal.addEventListener("click", (event) => {
+            if (event.target === elements.fileManagerModal) {
+                closeFileManager();
+            }
+        });
+
+        loadDashboard();
+        tickRefreshCountdown();
+        setInterval(tickRefreshCountdown, 1000);
+    </script>
+</body>
+</html>
