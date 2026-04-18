@@ -1,0 +1,930 @@
+PSX STOCK ANALYSIS PROJECT ASSESSMENT
+Date: 2026-04-18
+Reviewer: Codex
+
+========================================================================
+1. EXECUTIVE SUMMARY
+========================================================================
+
+This project is an end-to-end PSX KSE100 analysis system. Collectively, it:
+
+- scrapes the latest PSX KSE100 market snapshot from the PSX website
+- validates and stores raw data
+- merges live data with historical seed data
+- cleans and deduplicates the dataset
+- generates ML features
+- trains a RandomForest prediction model
+- saves the trained model with metadata for API use
+- serves a Flask API for health, data, insights, prediction, and file management
+- serves a responsive dashboard with charts, auto-refresh, and file previews
+
+In plain words, this is not just a model script. It is a small platform:
+
+data ingestion -> data validation -> feature engineering -> model training
+-> model packaging -> API -> dashboard -> artifact management
+
+That is ambitious for a student project, and it shows good ownership and
+product thinking.
+
+My rating:
+
+- Educational / portfolio value: 8/10
+- Current implementation quality: 6.5/10
+- Production readiness today: 4/10
+
+Why this rating:
+
+- The project already has real moving parts and many of them work.
+- The code shows effort to add validations, modular scripts, testing, and UI.
+- The biggest quality gap is not "can it run?" but "is the data/model flow
+  trustworthy and deployable long-term?"
+
+The strongest parts:
+
+- real live scraping
+- clear pipeline separation
+- basic test coverage
+- dashboard and API integration
+- artifact management and retention
+
+The biggest risks:
+
+- live history is not truly cumulative across runs
+- the historical seed data is outdated relative to live data
+- the deployed repo will not contain the data/model files it depends on
+- destructive endpoints are publicly callable with no authentication
+- the current web request triggers a long-running training pipeline synchronously
+
+
+========================================================================
+2. WHAT THE PROGRAM IS DOING COLLECTIVELY
+========================================================================
+
+High-level system flow:
+
+1. scripts/fetch_data.py
+   Scrapes live KSE100 values from the PSX website, validates the numbers,
+   and saves a timestamped raw CSV plus latest_live_data.csv.
+
+2. scripts/clean_data.py
+   Loads the historical seed CSV and the newest live CSV, standardizes the
+   schema, converts dates/numbers, removes invalid rows, removes duplicate
+   dates, sorts ascending, and writes cleaned outputs.
+
+3. scripts/features.py
+   Creates ML features such as Return, MA_7, MA_30, and Volatility, while
+   keeping the latest unlabeled row available for API prediction.
+
+4. scripts/train_model.py
+   Trains a RandomForestClassifier using the processed feature dataset,
+   saves the model, feature columns, latest feature row, metrics, warnings,
+   and profile metadata into model.pkl.
+
+5. scripts/run_pipeline.py
+   Orchestrates the full workflow from live fetch to model save, archives
+   outputs, and prunes old archive files.
+
+6. app.py
+   Exposes Flask routes for:
+   - /health
+   - /data
+   - /predict
+   - /insights
+   - /api/files
+   - /api/files/preview
+   - /api/files/delete
+   - /api/pipeline/run
+   and serves the dashboard HTML.
+
+7. static/index.html
+   Renders a laptop-first dashboard with charts, status badges, auto-refresh,
+   file management, and a pipeline trigger button.
+
+
+========================================================================
+3. FUNCTIONALITY THE PROJECT CURRENTLY SUPPORTS
+========================================================================
+
+Confirmed supported functionality:
+
+- live KSE100 scraping from the PSX site
+- numeric validation on fetched values
+- CSV-based raw data archiving
+- cleaned dataset generation
+- feature engineering for training and API prediction
+- model training and model persistence
+- latest feature snapshot stored with the model
+- health endpoint for API readiness
+- prediction endpoint using saved latest features
+- insights endpoint for average return and volatility
+- dashboard charts for trend and market structure
+- file listing, preview, and archive deletion
+- artifact retention pruning to prevent unlimited file growth
+- auto-refresh in the UI
+- unit tests for key pipeline pieces
+
+This means the project is already a functioning MVP, not just a collection
+of disconnected scripts.
+
+
+========================================================================
+4. FILE-BY-FILE REVIEW
+========================================================================
+
+4.1 .gitignore
+
+Assessment:
+
+- Good: keeps local artifacts out of Git.
+- Major risk: it ignores data/raw/*, data/processed/*, and *.pkl.
+- Result: the repository itself does not track the historical seed data,
+  processed datasets, or model files.
+
+Why this matters:
+
+- A fresh deployment from Git will not contain the required seed dataset.
+- The app can start, but data/model-dependent features will fail until the
+  pipeline is run.
+- The pipeline itself currently expects the seed history file to exist.
+
+Observed fact:
+
+- git ls-files confirms that data files and model files are not tracked.
+
+Conclusion:
+
+- This is good for repo cleanliness, but it is a deployment blocker unless
+  the project is changed to bootstrap its own data or a tracked seed sample
+  is added.
+
+
+4.2 README.md
+
+Assessment:
+
+- Too minimal for the current complexity of the project.
+- Does not explain architecture, setup, running the pipeline, or deployment.
+
+Conclusion:
+
+- Documentation is far below the level the code now deserves.
+
+
+4.3 manual.txt
+
+Assessment:
+
+- Reads like an earlier learning note rather than current project docs.
+- Contains encoding/mojibake issues.
+- Does not match the current implementation anymore.
+
+Conclusion:
+
+- Should be replaced by real setup/developer documentation.
+
+
+4.4 requirements.txt
+
+Good:
+
+- Core runtime packages are present: Flask, pandas, scikit-learn, requests,
+  beautifulsoup4.
+
+Weaknesses:
+
+- gunicorn is missing, even though Procfile expects it.
+- bs4 and beautifulsoup4 are both included; bs4 is only a thin wrapper and
+  is redundant here.
+- Some packages appear unused in the current tracked codebase, including
+  matplotlib and pillow.
+
+Conclusion:
+
+- Needs cleanup and a production dependency pass.
+
+
+4.5 Procfile
+
+Good:
+
+- Correct production-style start target: web: gunicorn app:app
+
+Weakness:
+
+- This will fail on deployment until gunicorn is actually installed.
+
+
+4.6 app.py
+
+Strengths:
+
+- Clean route layout.
+- Good user-facing API surface.
+- Health endpoint exists.
+- Prediction endpoint uses saved latest_features if available.
+- File management routes are practical for a dashboard app.
+- Pipeline lock prevents two overlapping runs inside the same process.
+
+Weaknesses:
+
+- Long-running pipeline is executed directly inside a web request.
+- Pipeline locking is only process-local, not distributed.
+- No authentication or authorization for:
+  - /api/pipeline/run
+  - /api/files/delete
+- Model and data are loaded from disk repeatedly on requests.
+- No structured logging; operational issues rely on prints and generic errors.
+- Entire architecture depends on local filesystem state.
+
+Professional judgment:
+
+- app.py is good for a local MVP and demo app.
+- It is not yet structured like a production Flask service.
+
+
+4.7 scripts/pipeline_utils.py
+
+Strengths:
+
+- Good separation of reusable filesystem logic.
+- Directory constants are centralized.
+- Archive path generation is clean.
+- Managed file preview and deletion are useful admin features.
+- Protected files logic is a strong safety measure.
+
+Weaknesses:
+
+- Storage root is hard-coded to local project directories.
+- No environment-based path override.
+- Pickle preview loads a pickle directly; pickle is unsafe if files are ever
+  untrusted.
+
+Conclusion:
+
+- This is one of the stronger modules in the project.
+
+
+4.8 scripts/fetch_data.py
+
+Strengths:
+
+- Uses a realistic browser User-Agent.
+- Has stronger-than-average scraper validation.
+- Handles multiple PSX HTML layouts for KSE100 block extraction.
+- Validates high/low/close/change/change_percent relationships.
+- Archives the fetched result and keeps a latest copy.
+
+Weaknesses:
+
+- HTML scraping is inherently brittle if the PSX markup changes.
+- No retry strategy or exponential backoff.
+- No alerting if the HTML shape changes.
+- "Open" is not actually scraped; it is proxied from previous close.
+
+Professional judgment:
+
+- This is a solid student-level scraper with validation.
+- It is still not as reliable as using an official API or stable machine-
+  readable feed.
+
+
+4.9 scripts/clean_data.py
+
+Strengths:
+
+- Good required-column validation.
+- Handles multiple date formats.
+- Converts numeric fields robustly.
+- Removes invalid rows and duplicate dates.
+- Produces stable ascending output.
+
+Weaknesses:
+
+- Uses print + return None on failure instead of raising explicit exceptions.
+- Drops to a generic failure path that can hide stack detail during debugging.
+- Only required columns are preserved; extra source metadata is lost at this
+  stage.
+
+Conclusion:
+
+- Functionally good, but error-handling style should be improved.
+
+
+4.10 scripts/features.py
+
+Strengths:
+
+- Keeps a latest unlabeled row for API prediction.
+- Produces useful beginner-level time-series features.
+- Performs validation before writing output.
+
+Weaknesses:
+
+- Feature set is very basic.
+- No gap-aware feature handling.
+- No calendar/session-aware logic.
+- No richer technical indicators or data quality profile.
+
+Conclusion:
+
+- Good as a first ML feature layer, but not enough for reliable market modeling.
+
+
+4.11 scripts/train_model.py
+
+Strengths:
+
+- Saves model together with metadata, feature columns, latest row, warnings,
+  metrics, and profile.
+- Uses chronological split rather than random shuffling.
+- Adds a useful warning when the latest date gap is large.
+
+Weaknesses:
+
+- The model is trained across a very large historical gap between the seed
+  history and live row.
+- Accuracy alone is not enough as a model quality metric.
+- No walk-forward validation.
+- No confidence/probability returned in API.
+- No baseline comparison.
+- No model registry/versioning.
+- Still relies on local pickle files.
+
+Professional judgment:
+
+- The code is better than a typical beginner "just save model.pkl" script.
+- The modeling approach is still weak for real financial prediction.
+
+
+4.12 scripts/run_pipeline.py
+
+Strengths:
+
+- Clean orchestration of fetch -> clean -> feature -> train -> archive -> prune.
+- Returns a useful summary object.
+- Failure checks exist between stages.
+
+Critical weakness:
+
+- It always uses SEED_HISTORY_PATH as history input.
+- That means multiple live runs do NOT build a cumulative live history.
+- Old live rows are archived, but not preserved in the active training dataset
+  unless they already exist in the seed file.
+
+Why this is serious:
+
+- The app appears to "hold old data", but the active dataset does not truly
+  grow across live runs.
+- This directly hurts model quality and contradicts the intended long-term
+  pipeline behavior.
+
+This is one of the most important issues to fix next.
+
+
+4.13 static/index.html
+
+Strengths:
+
+- Strong visual improvement over a basic template.
+- Tailwind dashboard is practical and modern.
+- Trend chart and market structure chart are useful.
+- Auto-refresh is implemented.
+- File manager modal is a nice admin feature.
+
+Weaknesses:
+
+- Uses external CDN dependencies for Tailwind, Chart.js, and Google Fonts.
+- That creates a runtime dependency on third-party networks.
+- Snapshot UI still renders "Open" even though the model bundle no longer
+  stores Open as a feature.
+- No authentication flow around admin actions in the UI.
+
+Conclusion:
+
+- Good portfolio UI.
+- Needs production hardening.
+
+
+4.14 tests/test_psx_pipeline.py and tests/fixtures/psx_kse100_sample.html
+
+Strengths:
+
+- Good starting automated coverage.
+- Tests scraper parsing.
+- Tests cleaning, feature engineering, training, and file retention behavior.
+- Tests protected file deletion and file listing route.
+
+Weaknesses:
+
+- Coverage is still narrow relative to the full app.
+- No automated test for /predict or /insights behavior.
+- No test for /api/pipeline/run concurrency.
+- No frontend tests.
+- No deployment/startup smoke test.
+- No test proving the current-history accumulation bug.
+
+Conclusion:
+
+- Better than many student projects, but still far from comprehensive.
+
+
+========================================================================
+5. TESTS AND RUNTIME CHECKS I PERFORMED
+========================================================================
+
+All checks below were run on 2026-04-18.
+
+5.1 Repository and artifact inspection
+
+- Inspected tracked files with git ls-files
+- Inspected current artifacts in data/ and models/
+- Verified that the seed file, latest raw file, cleaned file, featured file,
+  and model file exist locally
+
+Observed current dataset state:
+
+- seed history rows: 3221
+- latest live rows: 1
+- merged/cleaned/featured rows: 3222
+- current featured latest date: 2026-04-17
+
+
+5.2 Syntax / import smoke check
+
+Command:
+
+- python -m compileall .
+
+Result:
+
+- PASS
+
+
+5.3 Automated tests
+
+Command:
+
+- .\venv\Scripts\python.exe -m unittest discover -s tests -v
+
+Result:
+
+- PASS
+- 5 tests ran successfully
+
+Test coverage confirmed:
+
+- scraper parsing
+- local clean/feature/train flow
+- archive pruning
+- protected file deletion behavior
+- file listing route
+
+
+5.4 Flask route smoke checks
+
+Verified routes:
+
+- / -> 200
+- /health -> 200
+- /data -> 200
+- /predict -> 200
+- /insights -> 200
+- /api/files -> 200
+
+
+5.5 Negative-path API checks
+
+Verified failures:
+
+- GET /api/files/preview without params -> 400
+- POST /api/files/delete for protected file latest_live_data.csv -> 400
+- POST /api/files/delete for missing file -> 404
+
+This is good evidence that some failure paths are handled properly.
+
+
+5.6 Live end-to-end pipeline run
+
+I ran a real end-to-end pipeline against the live PSX website.
+
+Result:
+
+- PASS
+- Live fetch succeeded
+- Clean/feature/train/archive flow succeeded
+- Model saved successfully
+
+Observed metrics from the live run:
+
+- latest prediction date: 2026-04-17
+- test accuracy: 0.5352112676056338
+- training rows: 2553
+- test rows: 639
+- latest prediction: DOWN
+
+Important warning produced by the system:
+
+- "Latest data gap is 1879 days. Refresh the historical baseline for more
+  reliable live features."
+
+My interpretation:
+
+- The pipeline works technically.
+- The model quality is still not trustworthy because the dataset continuity is
+  weak.
+
+
+========================================================================
+6. OVERALL STRENGTHS
+========================================================================
+
+This project does several things unusually well for its stage:
+
+1. It is full-stack.
+   It combines scraping, data processing, ML, API, and frontend.
+
+2. It has real product shape.
+   It is more than a notebook experiment. It behaves like an application.
+
+3. It has operational thinking.
+   File retention, health endpoint, model metadata, and file preview/delete
+   functionality show practical thinking.
+
+4. It has good modular decomposition.
+   The scripts are separated by responsibility instead of being mixed into one
+   huge file.
+
+5. It already contains automated tests.
+   This is a strong signal of engineering maturity compared to many student
+   projects.
+
+6. The scraper has validation.
+   That is an important quality step and often missing in beginner projects.
+
+
+========================================================================
+7. MAIN WEAKNESSES AND RISKS
+========================================================================
+
+CRITICAL ISSUES
+
+1. Active live history is not cumulative.
+
+- The pipeline merges the newest live file with the original seed file, not
+  with the current accumulated history.
+- This means prior live sessions are archived but not kept in the active
+  dataset.
+
+2. Historical data continuity is poor.
+
+- The seed dataset ends years before the live row.
+- Features such as Return, MA_7, MA_30, and Volatility become distorted when
+  computed across such a large time gap.
+
+3. Deployment from Git will not be self-sufficient.
+
+- The repo does not track the seed CSV, processed files, or model file.
+- A fresh deploy will not have the historical base file that the pipeline
+  currently depends on.
+
+4. Sensitive admin endpoints are unauthenticated.
+
+- Anyone who can access the deployed app could trigger retraining or delete
+  archive files.
+
+
+HIGH-PRIORITY ISSUES
+
+5. Long-running training is triggered inside an HTTP request.
+
+- This can block the web worker.
+- It makes timeouts and user-facing latency more likely.
+- It is not a scalable production design.
+
+6. Storage is tied to local files.
+
+- This makes the app fragile across deployments, restarts, and scaling.
+- It also limits deployment choices.
+
+7. Procfile and dependencies are inconsistent.
+
+- Procfile expects gunicorn.
+- requirements.txt does not install gunicorn.
+
+8. UI/admin operations depend on third-party CDNs.
+
+- Tailwind CDN, Google Fonts, and Chart.js CDN are convenient for a demo but
+  less ideal for hardened deployment.
+
+
+MEDIUM-PRIORITY ISSUES
+
+9. Error handling uses prints and None returns in several pipeline stages.
+
+10. Docs are weak relative to project complexity.
+
+11. Model evaluation is too shallow for financial forecasting.
+
+12. Test coverage is good as a start, but not enough for deployment confidence.
+
+
+========================================================================
+8. WHAT IS MISSING
+========================================================================
+
+Major missing capabilities before calling this production-like:
+
+- cumulative live-history management
+- historical backfill update process
+- authentication / admin protection
+- background job or scheduler design
+- environment-driven storage paths
+- deployment bootstrap strategy
+- structured logging
+- better model evaluation
+- proper operational documentation
+- rollback / audit / monitoring strategy
+
+
+========================================================================
+9. TODO LIST I WOULD RECOMMEND
+========================================================================
+
+IMMEDIATE TODOs
+
+1. Fix the active data accumulation bug.
+   The pipeline should use the current merged history if it exists, not always
+   the original seed file.
+
+2. Add a historical backfill strategy.
+   Without recent historical continuity, live prediction quality will remain weak.
+
+3. Add gunicorn to requirements.txt.
+
+4. Add environment-configurable storage roots.
+   Example idea:
+   - APP_DATA_DIR
+   - APP_MODELS_DIR
+
+5. Protect admin endpoints.
+   At minimum:
+   - admin token
+   - session auth
+   - CSRF-safe admin actions
+
+6. Move pipeline execution out of the request/response path.
+   Use:
+   - a scheduled job
+   - a background worker
+   - or a secure admin trigger queue
+
+7. Improve README and deployment docs.
+
+
+SHORT-TERM TODOs
+
+8. Replace print + None error flow with structured exceptions and logging.
+
+9. Add model version metadata and save richer evaluation artifacts.
+
+10. Add tests for:
+   - /predict
+   - /insights
+   - /api/pipeline/run
+   - current-history accumulation
+   - missing model/data startup behavior
+
+11. Clean requirements.txt to remove redundant or unused packages.
+
+12. Align the dashboard with the actual backend schema.
+   Example:
+   - stop showing Open if it is not part of the saved latest feature snapshot
+   - or clearly label it as a proxy/source-derived value
+
+
+MEDIUM-TERM TODOs
+
+13. Replace local artifact storage with a more deployable design.
+   Better long-term options:
+   - PostgreSQL for metadata/history
+   - object storage for archives
+   - Redis / queue for jobs
+
+14. Add model confidence scores and probability outputs.
+
+15. Add walk-forward validation and baseline comparisons.
+
+16. Add monitoring and alerts.
+
+17. Add audit logs for pipeline runs and file deletions.
+
+
+========================================================================
+10. WHAT IS REMAINING BEFORE DEPLOYMENT
+========================================================================
+
+Current conclusion:
+
+- The project is demo-deployable only after some fixes.
+- It is not yet ready for a public production deployment as-is.
+
+Required before deployment:
+
+1. Add gunicorn to requirements.txt.
+
+2. Decide how storage will persist across restarts.
+   The app writes data and models locally, so persistent storage is required.
+
+3. Make data/model paths configurable via environment variables.
+
+4. Decide how the historical seed dataset will be provided in deployment.
+   Right now it is not tracked in Git.
+
+5. Protect the destructive/admin endpoints.
+
+6. Decide how the pipeline will be triggered:
+   - secure admin action
+   - scheduled job
+   - background worker
+
+7. Add a startup/deployment README.
+   Include:
+   - build command
+   - start command
+   - required env vars
+   - where storage is mounted
+   - how to run the pipeline the first time
+
+8. Add better observability.
+   At least:
+   - structured logs
+   - pipeline success/failure logs
+   - model/data age indicators
+
+9. Revisit data continuity before trusting the model publicly.
+
+
+========================================================================
+11. WHERE I WOULD DEPLOY THIS WEB APP
+========================================================================
+
+My recommendation depends on your goal.
+
+Best current platform for this project with the fewest conceptual jumps:
+
+- Railway
+
+Why Railway is a strong fit:
+
+- Railway has a current official Flask deployment guide.
+- Railway supports persistent volumes.
+- Railway documents that if an app writes to a relative path like ./data,
+  the volume should be mounted at the matching absolute path under /app.
+- Railway gives a public HTTPS domain and has documented healthcheck support.
+- Railway documents a maximum HTTP request duration of 15 minutes, which is
+  relevant because your pipeline currently runs inside a web request.
+
+Important caveat:
+
+- I would still not keep long-term training inside a user-facing request.
+- Even on Railway, I would eventually move retraining to a secure background
+  or scheduled workflow.
+
+
+Second strong option:
+
+- Render
+
+Why Render is good:
+
+- Render has an official Flask deployment guide.
+- Render supports persistent disks.
+- Render supports web services, background workers, and cron jobs.
+
+Why Render is slightly less natural for this exact design today:
+
+- Render states that disks are only accessible by a single service instance.
+- Render also states cron jobs cannot have attached disks.
+- Because your current design relies on the same local files for the web app
+  and pipeline outputs, that limitation becomes important.
+
+Render becomes a better choice after one of these changes:
+
+- the pipeline remains inside the same web service
+- or the app is refactored to store state outside the local disk
+
+
+Third option if you want the simplest "student project online quickly" path:
+
+- PythonAnywhere
+
+Why:
+
+- It is friendly for Flask beginners.
+- It gives persistent hosted filesystem behavior that fits your current local-
+  file design better than many serverless-style platforms.
+
+Why it is not my first long-term choice:
+
+- It is less aligned with the more production-like architecture you are already
+  moving toward.
+
+
+My final deployment recommendation:
+
+- For this codebase today: Railway first
+- After storage/auth/job refactor: Railway or Render are both strong
+
+
+========================================================================
+12. PROFESSIONAL REASONING: HOW I SEE THIS PROJECT
+========================================================================
+
+This project is already beyond "beginner script" level because it shows
+system thinking:
+
+- pipeline stages are separated
+- the frontend is integrated with the API
+- the model is bundled with metadata
+- archives are managed
+- tests exist
+
+That said, the project is still in the transition zone between:
+
+- "working demo"
+and
+- "reliable product"
+
+Right now, its biggest weakness is not coding style.
+Its biggest weakness is data system design.
+
+The most important professional insight here is:
+
+You already have enough features.
+What you need next is reliability, trust, and deployability.
+
+If you fix only one thing next, fix the active history accumulation bug.
+If you fix only two things next, then also solve historical continuity/backfill.
+
+Those two changes will improve both:
+
+- the correctness of the pipeline
+- the quality of the model
+
+more than any UI change or extra chart would.
+
+
+========================================================================
+13. FINAL VERDICT
+========================================================================
+
+This is a strong portfolio-quality project with real ambition and visible
+engineering effort.
+
+It is absolutely worth continuing.
+
+My honest professional verdict:
+
+- As a learning/portfolio project: strong
+- As a locally usable dashboard: good
+- As a public deployed app today: not ready yet
+- As a foundation for a proper PSX prediction platform: promising
+
+If we continue from here, the next phase should focus on:
+
+1. data continuity
+2. deployment readiness
+3. security for admin actions
+4. better model trustworthiness
+
+
+========================================================================
+14. OFFICIAL DEPLOYMENT SOURCES CHECKED
+========================================================================
+
+These references were checked on 2026-04-18 because platform details can
+change over time.
+
+Railway
+
+- Flask deployment guide:
+  https://docs.railway.com/guides/flask
+- Volumes guide:
+  https://docs.railway.com/volumes
+- Public networking and request limits:
+  https://docs.railway.com/networking/public-networking/specs-and-limits
+
+Render
+
+- Flask deployment guide:
+  https://render.com/docs/deploy-flask
+- Persistent disks:
+  https://render.com/docs/disks
+- Service types:
+  https://render.com/docs/service-types
+
+PythonAnywhere
+
+- Flask hosting guide:
+  https://help.pythonanywhere.com/pages/Flask
+
