@@ -1,0 +1,231 @@
+PSX Stock Analysis Project - Issues and Solutions
+This document reviews the codebase file by file, identifies weaknesses and root causes, and proposes detailed fixes. Each issue is followed by clear solution steps and a Master Prompt to guide automated code fixes.
+.gitignore
+Issue: The .gitignore excludes critical data and model files (data/raw/*, data/processed/*, and *.pkl). This means the repository does not include the historical seed dataset or trained model. A fresh deploy from Git would lack the base data needed to run the app or build the model, leading to failures in data ingestion and predictions.
+Solution:
+* Include a seed dataset: Add a minimal historical seed CSV file to the repository (e.g. data/processed/seed.csv). This ensures a fresh clone has initial data. The file can be a small sample or compressed version of historical KSE100 data.
+* Update pipeline logic: Modify the pipeline so that if the seed data is missing or outdated, it can be regenerated or fetched. For example, check at startup if data/processed/seed.csv exists; if not, populate it from an external source or a bundled sample.
+* Adjust .gitignore patterns: Remove or modify patterns that exclude files you now want to keep. For instance, you might only ignore truly scratch data (like intermediate raw files) but keep one copy of processed data and the latest model in data/ or models/.
+* Document setup: Update the README (or a setup script) to explain how to initialize or update the historical data. For example, include a command like python -m scripts.fetch_data to bootstrap data if needed.
+Master Prompt:
+"Examine .gitignore and repository contents. Ensure the codebase either version-controls a base dataset and initial model or can generate them at startup. Adjust .gitignore to no longer ignore the committed seed data and model. Add code in the data pipeline (e.g. run_pipeline.py) to check for missing historical data on first run and download or create it if absent. Provide instructions or code to bootstrap the historical dataset on a new deployment."
+README.md
+Issue: The README.md is too minimal. It lacks architecture diagrams, setup instructions, usage examples, and deployment guidance. A developer or operator cannot understand how to configure, run, or extend the system easily.
+Solution:
+* Expand documentation: Write detailed sections covering:
+* Project overview: Briefly describe the data flow (scraping ? cleaning ? feature engineering ? model training ? API/dashboard).
+* Installation: List prerequisites (Python version, environment, etc.) and show how to install requirements (e.g. pip install -r requirements.txt).
+* Directory structure: Explain where data files, scripts, and models live.
+* Usage: Demonstrate how to run key parts: fetching data (scripts/fetch_data.py), training model (scripts/train_model.py), and starting the API (flask run or similar).
+* Pipeline execution: Show how to run the full pipeline (scripts/run_pipeline.py) and describe what each step does.
+* API routes: Document each Flask endpoint ( /health, /predict, /api/files, etc.), including required parameters and example responses.
+* Dashboard: Explain the UI (the charts shown, how to trigger pipeline runs).
+* Deployment: Give instructions for deploying (including adding gunicorn, configuring environment variables, etc.), and link to recommended hosting platforms (Heroku, Railway, etc.).
+* Example content: Provide code snippets or screenshots where useful. For instance, show example curl commands for the /predict endpoint.
+* Update as code changes: Maintain the README as features evolve (e.g., update docs when API endpoints or file structures change).
+Master Prompt:
+"Update the README.md to fully describe the project. Include architecture overview, environment setup, data sources, steps to run the pipeline, how to use the API endpoints and dashboard, and deployment instructions. Ensure every script and major route is explained with examples. Add any missing sections so that a new developer or user can set up and run the project without external help."
+manual.txt
+Issue: manual.txt appears to be an outdated learning notebook or tutorial with encoding issues. It does not match the current codebase and is not used by the application.
+Solution:
+* Replace or remove: Remove manual.txt if it's obsolete. If it contains any valuable instructions, migrate relevant parts into the updated documentation (such as a Developer Guide section in the README).
+* Fix encoding: If you keep it, correct any character encoding problems so it is readable. Otherwise, archive or delete it to avoid confusion.
+* Documentation alignment: Ensure that any remaining documentation matches the current implementation (e.g., if manual.txt described an older file structure, update references to the current one).
+Master Prompt:
+"Assess manual.txt and determine if its content is needed. If it is outdated, delete it or archive it separately. Otherwise, update any instructions so they reflect the current code (fix encoding issues and update file paths). Incorporate any useful legacy content into the official documentation, then remove the standalone manual."
+requirements.txt
+Issue: The requirements.txt has several problems:
+* Missing Gunicorn: It's needed by the Procfile but not listed, so production deployment (e.g. Heroku) will fail.
+* Redundant packages: Both bs4 and beautifulsoup4 are listed; bs4 is just a wrapper for beautifulsoup4.
+* Unused packages: Libraries like matplotlib and pillow are listed but not used in the code.
+Solution:
+* Add missing dependencies: Add gunicorn to requirements.txt. Also consider adding any other deployment-related libraries (e.g. flask-cors if needed).
+* Remove redundancy: Remove bs4 (keep only beautifulsoup4).
+* Clean up unused libs: Remove matplotlib, pillow, or any others not used by the current code (run pip install -r requirements.txt and test import errors to confirm usage).
+* Pin versions: For stability, specify version ranges or exact versions for critical packages (e.g. Flask>=2.0,<3.0). This ensures consistent builds.
+* Regular audit: Occasionally review requirements.txt for drift (use tools like pip-review or pipreqs).
+Master Prompt:
+"Open requirements.txt. Add gunicorn (so it matches the Procfile). Remove duplicate or unused entries: delete bs4 if present and any libraries not actually imported in the code (e.g., matplotlib, pillow if unused). Optionally, pin key packages to specific versions. Test that the app still runs after modifying the requirements."
+Procfile
+Issue: The Procfile (web: gunicorn app:app) expects Gunicorn to be installed. With gunicorn missing from requirements, this will break deployment on platforms like Heroku.
+Solution:
+* Install Gunicorn: Ensure gunicorn is added to requirements.txt (see above).
+* Validate web server call: Confirm Procfile correctly references the Flask app (app:app means the Flask instance named app in app.py). If the application factory pattern is used later, update accordingly (e.g. app:create_app).
+* Test locally: Run gunicorn app:app in a local environment to verify the server starts.
+Master Prompt:
+"Check the Procfile. Ensure the command (e.g., web: gunicorn app:app) correctly points to the Flask application. Add gunicorn to requirements.txt if not already done. Test the Procfile command locally to confirm that Gunicorn can launch the Flask app without errors."
+app.py
+Issue #1: Synchronous long-running pipeline. The /api/pipeline/run endpoint invokes the entire training pipeline inside the Flask request. This will block the web server until completion, leading to timeouts and a poor user experience.
+Solution:
+* Background task: Offload pipeline execution to a background job or separate process. For example:
+* Use a task queue like Celery or RQ. The route would trigger a job and immediately return (possibly with a job ID to poll status).
+* Alternatively, use Python's threading or multiprocessing to start the pipeline in a new thread or subprocess and return a quick HTTP response.
+* Or, remove the pipeline trigger from the public API entirely and run it on a schedule (e.g., a cron job or platform scheduler).
+* Immediate response: Change the endpoint to return a 202 Accepted (or similar) with a message that training has started.
+Master Prompt:
+"Refactor app.py so that /api/pipeline/run no longer executes the pipeline synchronously. Instead, integrate a background job system (like Celery with Redis/RabbitMQ or Python threading). When the route is called, queue the pipeline task and immediately return a success response. Ensure the front end handles this change (e.g., by polling an endpoint to check pipeline status)."
+Issue #2: Lack of authentication/authorization. Endpoints that modify or delete data (/api/pipeline/run, /api/files/delete) are unprotected. Anyone with access to the app URL can trigger these destructive actions.
+Solution:
+* Add auth mechanism: Implement a simple authentication system. Options include:
+* API tokens: Require a secret token or API key passed as a header or query parameter for admin routes.
+* Session-based login: Create a login page and require login before showing admin controls. Use Flask-Login or Flask-Security for sessions.
+* HTTP Basic Auth: For quick protection, use Basic Auth for admin routes.
+* Protect routes: Decorate sensitive endpoints to require authentication. For example:
+
+  @app.route('/api/pipeline/run')
+@requires_auth
+def run_pipeline():
+    ...
+* UI changes: Hide or disable the "Run Pipeline" button and file delete options unless the user is authenticated.
+* CSRF protection: If using session forms, ensure CSRF tokens on form submissions (Flask-WTF can help).
+Master Prompt:
+"Secure the admin routes in app.py. Implement an authentication check on routes like /api/pipeline/run and /api/files/delete. For instance, add a decorator that verifies an admin API token or user session. Update the frontend to require login or include the token for admin actions. Provide code changes that enforce authentication on these endpoints."
+Issue #3: Repeated disk I/O. The model and data files are reloaded from disk on every request (e.g. in the /predict endpoint). This is inefficient and may slow down responses.
+Solution:
+* Persistent loading: Load the model and necessary data once when the app starts, storing them in a global object. For example, load the model in the global scope or in an @app.before_first_request function.
+* Cache feature columns: Instead of reading feature schema from file on each request, keep it in memory or embed it in the model metadata.
+* Thread-safety: Ensure that the loaded model is thread-safe if using multiple workers (Gunicorn can pre-load).
+Master Prompt:
+"In app.py, change the code so that the machine learning model and feature metadata are loaded once at startup rather than on each request. For example, load model.pkl and feature columns into global variables or the Flask application context. Remove redundant file reads in each route. Test that predictions still work and that response times improve."
+Issue #4: No structured logging. The application uses prints or minimal logging. This makes debugging and monitoring harder in production.
+Solution:
+* Use logging module: Configure Python's logging to output INFO/ERROR logs. For example, at the top of app.py:
+
+  import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
+* Log important events: Replace print statements with logging.info(), logging.error(), etc., in routes and pipeline steps.
+* External logging: If deploying to platforms, route logs to stdout so the hosting environment can capture them.
+Master Prompt:
+"Integrate Python's logging into app.py. Replace any print() calls with logging.info() or logging.error(). Configure a log format that includes timestamps and severity. Ensure that all key events (e.g., starting pipeline, serving a prediction, catching exceptions) are logged appropriately."
+Issue #5: File system dependence. The app assumes a local filesystem for data persistence. This limits scaling (multiple servers would not share files) and makes deployments fragile if the container restarts.
+Solution:
+* Use environment configuration: Do not rely on hardcoded local paths. Instead, support environment variables for directories (covered more in pipeline_utils).
+* External storage: For production, consider using a database or object storage (e.g. AWS S3, a managed SQL/NoSQL DB) for persistent state. At a minimum, ensure the platform has a persistent volume mount.
+* Stateless design: Make the Flask app itself stateless by storing state (data, models) externally.
+Master Prompt:
+"Remove assumptions about local storage in app.py. Read data and model paths from environment variables or a config file. Explain how to configure persistent storage (e.g., mounting a volume). Consider integrating a database or remote storage for the data. Provide code changes and instructions for a stateless deployment."
+scripts/pipeline_utils.py
+Issue: The file paths for data and artifacts are hard-coded (e.g. relative to the project directory). There is no way to override them, and the storage root is fixed, making it hard to adapt to different environments or containerized setups.
+Solution:
+* Environment-based configuration: Introduce environment variables (e.g. APP_DATA_DIR, APP_MODELS_DIR) or a config file to set root directories. Use Python's os.environ.get() to read them.
+* Use a settings module: Create a config.py or use Flask's config system to centralize directory paths. For example:
+
+  DATA_DIR = os.environ.get('APP_DATA_DIR', './data')
+MODELS_DIR = os.environ.get('APP_MODELS_DIR', './models')
+* Refactor imports: In pipeline_utils.py, refer to these config variables instead of string literals.
+* Container readiness: Document how to set these environment variables on deployment (e.g., in Heroku or Docker).
+Master Prompt:
+"Modify scripts/pipeline_utils.py to read storage paths from environment variables or a configuration object instead of hardcoded values. For example, define DATA_ROOT = os.getenv('APP_DATA_DIR', './data'). Update all file operations to use these variables. Ensure the code works if these env vars are set differently (e.g., for a Docker volume)."
+scripts/fetch_data.py
+Issue #1: HTML scraping brittleness. The code relies on specific PSX website markup to extract prices. If the HTML structure changes, the scraper will break silently or produce wrong data.
+Solution:
+* Resilient parsing: Use more robust selectors (e.g., find by table headers or labels, not fixed indices).
+* Alerts on failure: Add checks that all expected fields (open, high, low, close) are found. If something is missing or validation fails, raise an error or send an alert (email/Slack).
+* Retry logic: Implement retries with exponential backoff in case of transient network issues. For example, use time.sleep() between attempts or use requests retry adapters.
+* Logging errors: Log parsing failures with details of the HTML snippet and the exception.
+* Unit tests: Write tests that simulate altered HTML (using saved HTML files) to ensure the scraper raises an error if it can't find data.
+Master Prompt:
+"In scripts/fetch_data.py, improve the robustness of the web scraper. Add error handling so that if expected elements (like KSE-100 values) are not found, an exception is thrown. Incorporate a retry strategy (e.g., retry 3 times with delays) for network calls. Replace brittle CSS selectors with more reliable ones if possible. Ensure that failures are logged or reported rather than causing silent data errors."
+Issue #2: "Open" value not scraped. The code sets the "Open" price as the previous close or otherwise fills it, instead of scraping the actual open price. This could be incorrect and may mislead the model or UI.
+Solution:
+* Scrape the open price: Check if the PSX site provides the opening price. If so, parse it similarly to high/low.
+* Remove "Open" if unavailable: If the open price cannot be reliably obtained, remove it from the feature set and UI to avoid confusion.
+* Consistent data: Ensure that the same feature columns are maintained across processing and UI. If "Open" is dropped, update the dashboard chart (see index.html section) and the features.py code that expects it.
+* Test end-to-end: After change, verify that a new data fetch populates open correctly (or is omitted), and that the feature engineering still runs.
+Master Prompt:
+"Review how the 'Open' price is obtained in scripts/fetch_data.py. If the PSX site provides an open price, parse it and include it in the output. If not, remove 'Open' from the dataset and adjust downstream code (such as feature engineering and UI) accordingly. Ensure the code and dashboard agree on whether the Open price is used."
+scripts/clean_data.py
+Issue #1: Error handling obscures failures. On validation failure (e.g. wrong columns), the code prints an error and returns None. This means the pipeline continues without a clear exception, which can hide problems during execution.
+Solution:
+* Raise exceptions: Instead of print and return None, raise a Python exception (e.g. ValueError) with a clear message. This will halt the pipeline and make debugging easier.
+* Use try/except upstream: Surround calls in run_pipeline.py with try/except to catch these exceptions and log an error, then abort or handle gracefully.
+* Unit tests: Write tests to simulate missing or malformed input CSVs. Verify that the function raises the expected exception, causing the pipeline to fail fast instead of silently producing no output.
+Master Prompt:
+"In scripts/clean_data.py, change error handling so that any fatal validation failures raise an exception rather than printing and returning None. For example, use raise Exception("..."). Ensure that the pipeline stops on error and the error message is logged. Update any code that calls clean_data to catch or propagate these exceptions."
+Issue #2: Dropping extra columns (metadata loss). The cleaning step only preserves required columns, discarding any additional data. If the raw CSV had useful metadata or extra fields, that information is lost.
+Solution:
+* Preserve or log extras: Modify clean_data.py to keep unrecognized columns in the output (perhaps with a prefix like raw_), or at least log their existence.
+* Column schema config: If certain fields are expected (like volume, ticker info), include them. Otherwise, use a more flexible schema that saves all columns, then drop only truly irrelevant ones.
+* Documentation: If dropping fields is intentional, document exactly which columns are kept and which are removed.
+* Test with sample data: Have test CSVs that include extra columns, and verify that clean_data does not silently discard them without notice.
+Master Prompt:
+"Review the column handling in scripts/clean_data.py. Modify the code so it does not inadvertently drop extra columns without notice. For example, write any additional columns to the output or log a warning when discarding them. Ensure that only truly irrelevant fields are removed, and that the rest of the data is preserved in the cleaned file."
+scripts/features.py
+Issue: The feature engineering is very basic. It creates simple features (return, moving averages), but ignores gaps (weekends/holidays), and lacks advanced indicators or calendar effects.
+Solution:
+* Gap-aware logic: If the data has missing days (e.g. no weekend data), ensure features like MA_7 and MA_30 are calculated correctly (e.g. skip non-trading days automatically). The current code may already do this if data only has trading dates, but verify.
+* Add calendar features: Include features like day-of-week, month, holiday flag, or days-since-last-trade to help the model understand time gaps.
+* Advanced technical indicators: Consider adding features like RSI, MACD, Bollinger Bands, or volatility indices (e.g. rolling std dev). This can improve model signal. Use libraries like TA-Lib or implement formulas.
+* Data quality checks: Before writing the output, validate that features make sense (e.g. no NaNs). Add handling for any N/A values (fill or forward-fill where appropriate).
+* Profiling: Generate a brief data profile or plots to understand feature distributions (this could be part of features.py or a separate analysis script).
+* Test output: Write tests that feed known input and check that the output features match expectations (e.g., known moving average values).
+Master Prompt:
+"Enhance scripts/features.py by adding more robust and richer features. For example, include calendar indicators (day-of-week, month, days-since-last-trade) and advanced technical metrics (e.g. volatility, RSI, MACD). Ensure the code correctly handles any date gaps (like weekends). Validate that no NaNs are produced and that the latest unlabeled row is still kept for prediction. Write unit tests to confirm feature calculations on sample data."
+scripts/train_model.py
+Issue #1: Training across a large temporal gap. The model is trained on historical data that ends long before the latest live data. This can degrade performance because market conditions may have changed.
+Solution:
+* Walk-forward validation: Instead of a single train/test split, implement walk-forward or time series cross-validation. For example, split data into several contiguous blocks and train/test sequentially to better simulate real-world performance.
+* Include recent data: Ensure the training set includes the most up-to-date labeled data. After each pipeline run, combine the new labeled row into training data so the model sees recent patterns. (Relates to pipeline fix in run_pipeline.py.)
+* Retraining schedule: Retrain the model regularly (e.g. daily or weekly with the new data) to adapt to market changes. Document or automate this schedule.
+Master Prompt:
+"In scripts/train_model.py, change the validation strategy to use time-based cross-validation. For instance, split the historical data into multiple train/test splits that respect chronology. Update the training process so that after adding new data, the model is retrained including recent samples. Ensure that metrics (beyond simple accuracy) are computed and saved."
+Issue #2: Limited evaluation metrics. The code only reports accuracy. For a stock direction model, accuracy alone is not sufficient (e.g. the baseline might be high). No probabilities or confidence scores are provided for predictions.
+Solution:
+* Additional metrics: Compute and save other metrics like precision, recall, F1-score, and especially a confusion matrix. For financial data, also consider profit-based metrics (e.g. strategy return).
+* Probability output: If using a probabilistic classifier, modify the /predict API to return predicted probabilities along with class. This helps downstream users gauge confidence. Use model.predict_proba() and include that in the JSON response.
+* Thresholding: Potentially allow different decision thresholds based on risk appetite.
+* Baseline comparison: Train a trivial baseline model (e.g. always predicting "no change" or last known sign) and compare performance. Document whether the RandomForest beats this baseline.
+* Persist metrics: Save all metrics and plots to the model metadata for auditing. For example, include a validation report (text or JSON) in the model bundle.
+Master Prompt:
+"Improve scripts/train_model.py by adding richer evaluation. After training, calculate metrics like precision, recall, F1, and add the confusion matrix. Also use predict_proba to store prediction probabilities. Modify the /predict API to return these probabilities or confidence. Finally, log or save all metrics to the model metadata so you can compare performance over time."
+Issue #3: No model versioning or registry. The code overwrites model.pkl each run, losing any previous versions. There's no tracking of model versions or rollback capability.
+Solution:
+* Timestamped models: Save each trained model with a unique version or timestamp in its filename (e.g., model_20260419.pkl).
+* Model registry: Store model metadata (version, training date, metrics) in a central registry (could be a simple JSON file or database).
+* API uses latest model: Modify the API so it always loads the latest model, not a fixed model.pkl (or use a symlink current_model.pkl).
+* Retention policy: Decide how many old models to keep and how to clean up (could reuse the archive/prune logic).
+* Test loading: Ensure that after saving a new model, the app reloads the correct one.
+Master Prompt:
+"Refactor scripts/train_model.py to implement model versioning. Instead of overwriting model.pkl, save each model with a unique identifier (such as a timestamp). Update the API loading logic to always use the newest model file. Record metadata (version, date, metrics) in a separate registry file. Ensure that old models are archived or pruned according to policy."
+scripts/run_pipeline.py
+Issue: Data history not cumulative. Currently, each pipeline run uses the original seed history file (SEED_HISTORY_PATH) and only appends the latest live row for that run. It does not accumulate historical live data. As a result, old live rows are saved only in archives but never included in the dataset used for training. This undermines the goal of continual learning.
+Solution:
+* Use processed history: Change the pipeline so that it reads the latest processed/cleaned data (which should include all previous runs) rather than the original seed every time. For example:
+* After cleaning and merging, overwrite or update a master history file with the new data.
+* In subsequent runs, use this updated history as the starting point.
+* Append new data: Instead of always merging with SEED_HISTORY_PATH, merge data/processed/current_history.csv (which is updated each run).
+* Archive strategy: Archive should still keep backups of each run (timestamped), but the "active" dataset should grow.
+* Backfill process: If starting fresh, include logic to merge seed data and all accumulated live data so far.
+* Testing cumulative logic: Simulate running the pipeline twice: after the second run, verify the processed dataset has two rows. Write a test or assertion to prevent future regressions.
+Master Prompt:
+"Revise scripts/run_pipeline.py so that the master dataset grows cumulatively. Instead of always reading from the original seed file, have it update the cleaned/processed history in place. For example, maintain a "current_history.csv" that gets appended with new live rows each run. Ensure that old data from previous runs is included in the training set and not just archived. Write code or tests to confirm that after multiple runs, the dataset contains all past data."
+static/index.html
+Issue #1: External CDN dependencies. The dashboard loads Tailwind CSS, Chart.js, and Google Fonts via CDN. This creates a runtime dependency on third-party networks, which can cause failures if those services are unreachable or blocked.
+Solution:
+* Local assets: Download the necessary CSS and JS files (Tailwind, Chart.js) into the project's static/ directory. Reference them locally (e.g., <script src="/static/js/chart.min.js">).
+* Font hosting: Host required fonts locally or choose safe web-safe fonts. Alternatively, use a CSS file with @font-face pointing to local copies.
+* Bundle/minify: Optionally bundle and minify assets to reduce load.
+* Test offline: Verify the dashboard loads properly when offline (no external requests).
+Master Prompt:
+"In static/index.html, replace CDN links with local files. Download Tailwind CSS and Chart.js libraries and serve them from static/. Adjust the HTML to reference these local paths. Also handle any fonts locally (download or use system fonts). Test the page to confirm it works without internet access."
+Issue #2: Mismatch in "Open" feature. The UI still displays an "Open" price in the summary, but the model pipeline no longer provides an open price (or it was never scraped). This leads to an inconsistency between the backend and the frontend.
+Solution:
+* Remove or fix: If the pipeline does not supply Open, remove the "Open" display from the dashboard. Alternatively, if you have implemented scraping of the open price (from above), ensure it is passed to the dashboard.
+* UI consistency: Check that all features shown on the UI (trend chart, structure chart) exactly match the columns produced by features.py. Update labels or data binding as needed.
+* Test display: After changes, reload the dashboard with sample data to ensure no UI errors occur (e.g., chart code expecting a missing field).
+Master Prompt:
+"Align the dashboard with the data it receives. In static/index.html, remove the 'Open' field if it's no longer provided by the backend. Ensure all chart elements and tables correspond to the actual feature columns (Close, MA_7, Volatility, etc.). Update any JavaScript or HTML elements so that the frontend does not reference missing data fields."
+Issue #3: No admin authentication in UI. The file manager and pipeline trigger are part of the dashboard UI but have no login flow. Anyone can access the HTML and potentially trigger actions if they know the endpoints.
+Solution:
+* Hide admin controls: Either require the user to log in before displaying admin features, or disable the pipeline button if not authorized.
+* Prompt for credentials: If implementing sessions, add a login modal/page. Once logged in, show the admin controls.
+* CSRF tokens: Ensure that forms (like file deletion) include CSRF tokens if using session auth.
+* UI feedback: Display an alert or disable buttons for unauthorized users.
+Master Prompt:
+"Secure the dashboard's admin features. In static/index.html, hide or disable the 'Run Pipeline' button and delete options unless the user is authenticated. If you implement a login, ensure the UI requires login before enabling these controls. Otherwise, clearly indicate that these actions are protected. Adjust any frontend scripts to skip admin actions when unauthorized."
+Final Summary
+All the above fixes focus on making the system production-ready and maintainable. Key action items include: ensuring the dataset accumulates over time; securing endpoints and UI; adding configuration and logging; improving documentation; and handling model versions and evaluations properly.
+Below are additional prompts to automate or verify these changes:
+Master Prompt (Global Fix):
+"As a senior developer, review the entire PSX stock analysis project. Apply fixes for all identified issues: enable cumulative data updates by changing the pipeline to append live data to history; update .gitignore so essential data isn't omitted; add setup bootstrap for historical data; implement authentication on admin API endpoints and secure the dashboard UI; move the long-running pipeline into a background job or scheduler; introduce configuration via environment variables for file paths; integrate Python logging across the app; expand requirements (add gunicorn) and documentation; bundle front-end assets locally; and improve model training (richer features, better validation, probability output, and versioning). Provide code changes, tests, and updated docs to demonstrate each fix."
+

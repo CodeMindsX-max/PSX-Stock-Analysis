@@ -1,0 +1,771 @@
+PSX STOCK ANALYSIS PROJECT ASSESSMENT
+Date: 2026-04-19
+Reviewer: Codex
+Assessment Type: Post-improvement technical review
+
+========================================================================
+1. EXECUTIVE SUMMARY
+========================================================================
+
+This project is now a much stronger end-to-end PSX KSE100 analysis system
+than in the previous review.
+
+It currently:
+
+- fetches the latest PSX KSE100 market snapshot from the PSX site
+- validates and stores live raw data
+- maintains a cumulative market history dataset
+- cleans and normalizes the dataset
+- generates ML-ready features, including technical and calendar features
+- trains and versions a prediction model
+- stores model metadata and a model registry
+- serves a Flask API for health, prediction, insights, files, and pipeline status
+- serves a responsive dashboard for viewing predictions and market state
+- protects admin routes with an admin token
+- runs the long pipeline asynchronously in the background
+
+In plain terms, this is no longer just a student script collection.
+It is now a small application platform:
+
+live data fetch
+-> cumulative history update
+-> cleaning
+-> feature engineering
+-> model training and versioning
+-> API
+-> dashboard
+-> protected admin operations
+
+Current rating:
+
+- Educational / portfolio value: 9/10
+- Implementation quality: 8/10
+- Production readiness today: 6.5/10
+
+Why the score improved:
+
+- the pipeline is now cumulative instead of seed-only
+- the long-running pipeline no longer blocks the Flask request
+- admin actions are protected
+- the app now supports environment-based storage configuration
+- model loading is cached instead of re-reading from disk on each request
+- model versioning and registry are implemented
+- documentation is now much better aligned with the codebase
+- tests cover more of the current system behavior
+
+Main remaining risks:
+
+- dashboard frontend still depends on CDN-hosted Tailwind and Chart.js
+- background pipeline execution uses in-process threading, which is fine for
+  a simple single-instance deployment but not ideal for a multi-worker or
+  distributed production setup
+- scraping still depends on upstream PSX page structure
+- pickle-based model storage is acceptable for trusted local artifacts, but
+  should remain limited to trusted files only
+
+
+========================================================================
+2. CURRENT PROGRAM STATUS
+========================================================================
+
+Overall maturity:
+
+- Strong advanced MVP
+- Good portfolio-quality engineering project
+- Suitable for local deployment and single-instance hosted deployment
+- Not yet a fully hardened multi-instance production service
+
+Current runtime status observed during review:
+
+- Flask app imports successfully
+- health endpoint responds successfully
+- prediction endpoint responds successfully
+- data and model artifacts are currently available
+- pipeline status is currently idle
+- admin token is not configured right now in the current environment
+
+What that means:
+
+- public read-only features are working
+- admin actions are intentionally locked until `PSX_ADMIN_TOKEN` is set
+- this is not a bug; it is expected protection behavior
+
+
+========================================================================
+3. DOES THE REMAINING UNSOLVED ITEM CAUSE ERRORS?
+========================================================================
+
+Short answer:
+
+- No, not in a normal internet-connected environment
+- Yes, it can become a deployment reliability issue in restricted/offline environments
+
+The remaining known gap is:
+
+- frontend assets still load from third-party CDNs
+
+Impact:
+
+- if internet access is available, the dashboard should render normally
+- if CDN access is blocked, the dashboard may lose styling or chart behavior
+- this does not break the Flask backend logic itself
+- this does not break model training, prediction APIs, or stored artifacts
+
+Professional judgment:
+
+- this is not a current core program failure
+- it is a deployment hardening gap
+- it should be addressed later if the goal is fully offline or highly reliable enterprise deployment
+
+
+========================================================================
+4. MAJOR IMPROVEMENTS NOW PRESENT
+========================================================================
+
+Compared with the earlier state, the following important improvements now exist:
+
+1. Pipeline execution behavior
+
+- pipeline no longer blocks the request thread directly
+- `/api/pipeline/run` now starts a background job and returns quickly
+- pipeline state can be checked using `/api/pipeline/status`
+
+2. Security posture
+
+- admin routes now require an admin token
+- dashboard admin features are disabled unless the token is provided
+- destructive file actions are no longer openly exposed
+
+3. Data lifecycle
+
+- active history is now cumulative
+- the system can bootstrap missing current artifacts from available history
+- cleaned, featured, and model artifacts can be rebuilt when stale or missing
+
+4. Model lifecycle
+
+- models are versioned with timestamped files
+- a registry file records metadata about trained models
+- prediction responses now include probabilities and confidence
+
+5. Feature engineering
+
+- features are richer than before
+- technical indicators and calendar-style signals are included
+- latest unlabeled row is still preserved for API prediction
+
+6. Operations and maintainability
+
+- configuration supports environment-based storage paths
+- logging is integrated
+- README is substantially improved
+- tests were updated and are passing
+
+
+========================================================================
+5. WHAT THE PROGRAM IS DOING COLLECTIVELY
+========================================================================
+
+High-level system flow:
+
+1. Fetch latest live PSX KSE100 market snapshot
+2. Save and archive the live raw CSV
+3. Merge latest snapshot into cumulative market history
+4. Clean and normalize the history
+5. Generate machine learning features
+6. Train and evaluate a RandomForest model
+7. Save the current model plus a versioned model archive
+8. Record model metadata in a registry
+9. Serve prediction and insight APIs
+10. Display the output in a responsive dashboard
+
+This creates a complete small ML application loop:
+
+data ingestion
+-> data validation
+-> cumulative dataset maintenance
+-> feature generation
+-> model training
+-> model version control
+-> API serving
+-> dashboard display
+-> protected admin operations
+
+
+========================================================================
+6. FUNCTIONALITY CURRENTLY SUPPORTED
+========================================================================
+
+Confirmed supported functionality:
+
+- live KSE100 scraping from the PSX site
+- retry logic for fetch failures
+- validation of fetched market snapshot values
+- CSV storage of live raw snapshots
+- archive rotation/pruning
+- cumulative historical dataset maintenance
+- cleaning and normalization of mixed-format dates and numeric values
+- preservation of extra columns during cleaning
+- feature generation for model training and inference
+- calendar-aware feature support
+- technical indicators such as RSI, EMA, and MACD
+- training a RandomForest classification model
+- time-aware evaluation with holdout and walk-forward metrics
+- model versioning and model registry tracking
+- prediction probability output
+- health API
+- prediction API
+- insights API
+- file preview/list/delete admin APIs
+- pipeline status API
+- background pipeline execution
+- responsive dashboard layout
+- admin token UX in dashboard
+- unit test coverage for key pipeline and app behavior
+
+
+========================================================================
+7. FILE-BY-FILE TECHNICAL REVIEW
+========================================================================
+
+7.1 .gitignore
+
+Role:
+
+- controls which generated and local files are ignored by Git
+
+What it contributes:
+
+- keeps unnecessary local clutter out of version control
+- now allows critical baseline artifacts and registry files to be committed if desired
+
+Current strengths:
+
+- cleaner than before
+- better aligned with current data/model artifact needs
+
+Current weakness:
+
+- whether to commit `data/` and `models/` artifacts is still a project decision
+- team should consciously decide which baseline artifacts belong in Git
+
+
+7.2 README.md
+
+Role:
+
+- primary setup and usage documentation
+
+What it contributes:
+
+- explains architecture
+- documents configuration and environment variables
+- describes running the pipeline and Flask app
+- documents public and protected API routes
+- gives deployment notes
+
+Current strengths:
+
+- much more useful for onboarding
+- good enough for a new developer to understand project structure
+
+Current weakness:
+
+- could still be improved with screenshots and example JSON responses
+
+
+7.3 Procfile
+
+Role:
+
+- deployment entrypoint for Gunicorn-based hosting
+
+What it contributes:
+
+- makes the app straightforward to deploy on platforms that support Procfile-style startup
+
+Current strengths:
+
+- correct target: `gunicorn app:app`
+
+Current weakness:
+
+- if deployment uses multiple Gunicorn workers, in-process thread-based pipeline execution and process-local locks are not fully sufficient for global coordination
+
+
+7.4 app.py
+
+Role:
+
+- main Flask service
+
+What it contributes:
+
+- serves dashboard HTML
+- exposes health, data, predict, insight, file, and pipeline endpoints
+- protects admin routes
+- manages runtime caching
+- tracks pipeline job status
+
+Current strengths:
+
+- cleaner operational structure than before
+- avoids repeated disk I/O for every request
+- provides admin route protection
+- supports background pipeline behavior
+- returns richer prediction output
+
+Current weaknesses:
+
+- background work still uses Python threading inside the Flask process
+- pipeline lock is per process, not distributed across multiple worker processes
+- app state is still file-based, not database-backed
+
+Engineering judgment:
+
+- good for local and simple hosted deployments
+- not yet ideal for horizontally scaled production
+
+
+7.5 scripts/pipeline_utils.py
+
+Role:
+
+- centralized file, directory, archive, registry, and managed-file utilities
+
+What it contributes:
+
+- environment-based path configuration
+- directory creation
+- archive naming
+- file copying
+- registry read/write helpers
+- active model resolution
+- bootstrap helpers
+- file listing/preview/delete support
+
+Current strengths:
+
+- strong centralization of file-management logic
+- a meaningful improvement in maintainability
+
+Current weaknesses:
+
+- model preview still uses pickle loading, which should remain restricted to trusted local files only
+
+
+7.6 scripts/fetch_data.py
+
+Role:
+
+- live data acquisition layer
+
+What it contributes:
+
+- fetches latest PSX KSE100 snapshot
+- parses and validates fields
+- archives the live raw CSV
+
+Current strengths:
+
+- more defensive than before
+- includes retry logic
+- logs parsing/network issues more clearly
+- supports optional true open-price parsing if available in source HTML
+
+Current weaknesses:
+
+- still depends on the PSX site structure
+- if the source markup changes significantly, scraper maintenance will still be needed
+
+
+7.7 scripts/clean_data.py
+
+Role:
+
+- merges and normalizes source data into a reliable cleaned dataset
+
+What it contributes:
+
+- mixed date parsing
+- numeric normalization
+- duplicate-date resolution
+- sorted clean historical output
+- preservation of extra metadata columns
+
+Current strengths:
+
+- raises real failures instead of quietly returning `None`
+- preserves more information than before
+
+Current weaknesses:
+
+- still file-driven and batch-oriented rather than database-backed
+
+
+7.8 scripts/features.py
+
+Role:
+
+- transforms cleaned data into ML features
+
+What it contributes:
+
+- return-based features
+- rolling averages
+- volatility
+- calendar features
+- gap features
+- RSI/EMA/MACD indicators
+- target generation for next-direction classification
+
+Current strengths:
+
+- much stronger than the original basic feature set
+- better aligned with realistic time-series modeling work
+
+Current weaknesses:
+
+- feature set is still hand-engineered and could benefit from formal feature selection or model comparison later
+
+
+7.9 scripts/train_model.py
+
+Role:
+
+- trains, evaluates, versions, and stores the ML model
+
+What it contributes:
+
+- holdout evaluation
+- walk-forward evaluation
+- confusion matrix and richer metrics
+- probability output
+- versioned model persistence
+- registry updates
+
+Current strengths:
+
+- major improvement over a single simple accuracy-only pipeline
+- much better auditability and traceability
+
+Current weaknesses:
+
+- still only one model family
+- no hyperparameter search
+- no experiment tracking beyond basic registry metadata
+
+
+7.10 scripts/run_pipeline.py
+
+Role:
+
+- orchestration layer for the full pipeline
+
+What it contributes:
+
+- first-run bootstrap logic
+- cumulative history handling
+- end-to-end pipeline execution
+- archive management
+- stale-artifact rebuild logic
+
+Current strengths:
+
+- one of the most important improvements in the project
+- now aligns much better with continual learning behavior
+
+Current weaknesses:
+
+- orchestration still runs within the app server environment rather than a dedicated worker/queue system
+
+
+7.11 static/index.html
+
+Role:
+
+- frontend dashboard
+
+What it contributes:
+
+- responsive UI
+- status display
+- prediction summaries
+- charts
+- latest records table
+- snapshot cards
+- admin token flow
+- file manager interface
+- pipeline job feedback
+
+Current strengths:
+
+- significantly better layout behavior than before
+- now aligned with backend feature set
+- admin state is reflected in the UI
+- handles background pipeline flow more cleanly
+
+Current weaknesses:
+
+- still depends on CDN-hosted frontend libraries
+- offline or restricted-network deployment can affect styling/chart rendering
+
+
+7.12 tests/test_psx_pipeline.py
+
+Role:
+
+- regression protection for the core workflow
+
+What it contributes:
+
+- verifies scraper parsing
+- verifies cleaning, feature creation, and training behavior
+- verifies managed file protections
+- verifies route behavior including admin route protection
+
+Current strengths:
+
+- covers more relevant modern behavior than before
+
+Current weakness:
+
+- still moderate coverage rather than comprehensive coverage
+- more route and failure-mode tests would still help
+
+
+7.13 data/raw/*
+
+Role:
+
+- baseline and active raw market history
+
+Files present:
+
+- `Stock Exchange KSE 100(Pakistan).csv`
+- `market_history_current.csv`
+
+What they contribute:
+
+- provide the base and active cumulative history used by the pipeline
+
+
+7.14 data/processed/*
+
+Role:
+
+- pipeline outputs after cleaning and feature generation
+
+Files present:
+
+- `cleaned_data.csv`
+- `featured_data.csv`
+
+What they contribute:
+
+- provide the main operational datasets used by training and inference
+
+
+7.15 models/*
+
+Role:
+
+- model lifecycle artifacts
+
+Files present:
+
+- `model.pkl`
+- versioned `model_*.pkl`
+- `model_registry.json`
+
+What they contribute:
+
+- current production alias
+- historical model versions
+- model audit trail
+
+
+========================================================================
+8. CURRENT STRENGTHS
+========================================================================
+
+Top strengths of the program today:
+
+- clear modular separation across data fetch, cleaning, features, training, and serving
+- cumulative history handling is now present
+- meaningful model metadata and versioning now exist
+- admin operations are protected
+- background pipeline execution improves UX and reduces request blocking
+- dashboard is more responsive and aligned with the backend
+- configuration is more deployment-friendly through environment variables
+- documentation is now materially stronger
+- tests are in place and currently passing
+
+
+========================================================================
+9. CURRENT WEAKNESSES
+========================================================================
+
+Most important weaknesses still present:
+
+- frontend still depends on third-party CDNs
+- thread-based background processing is not ideal for multi-worker production
+- process-local locking is not enough for distributed concurrency control
+- scraper still depends on unstable external HTML structure
+- no real authentication system beyond admin token header
+- no database or object storage abstraction yet
+- no scheduler or queue platform integration
+- no advanced experiment management or model comparison framework
+
+
+========================================================================
+10. BEST POSSIBLE NEXT SOLUTIONS
+========================================================================
+
+If the goal is the next major quality jump, these are the best next steps:
+
+Priority 1:
+
+- vendor Tailwind and Chart.js locally into `static/`
+- remove external font/CDN dependency
+
+Priority 2:
+
+- move pipeline execution into a dedicated task system such as Celery, RQ,
+  Dramatiq, or an external scheduler/worker service
+
+Priority 3:
+
+- use a database or object storage layer instead of relying only on local files
+
+Priority 4:
+
+- implement stronger admin authentication and session handling if this becomes
+  a user-facing deployed application
+
+Priority 5:
+
+- add more tests:
+  - failure-path tests
+  - route authorization tests
+  - bootstrap tests
+  - stale-artifact rebuild tests
+  - dashboard contract tests
+
+Priority 6:
+
+- compare multiple models:
+  - logistic regression baseline
+  - gradient boosting
+  - XGBoost/LightGBM if allowed later
+
+Priority 7:
+
+- add model monitoring:
+  - training-date freshness
+  - dataset drift checks
+  - scraping health checks
+
+
+========================================================================
+11. CONTRIBUTION OF EACH MAIN FILE TO THE PROGRAM
+========================================================================
+
+This section answers what each file currently does for the system.
+
+`app.py`
+
+- web application entrypoint
+- coordinates API responses, runtime caches, admin protection, and pipeline status
+
+`scripts/pipeline_utils.py`
+
+- storage configuration and shared utility backbone for the whole project
+
+`scripts/fetch_data.py`
+
+- live PSX data acquisition and raw snapshot creation
+
+`scripts/clean_data.py`
+
+- data normalization and cumulative-history cleanup
+
+`scripts/features.py`
+
+- ML feature generation for both training and prediction support
+
+`scripts/train_model.py`
+
+- model fitting, evaluation, versioning, and registry persistence
+
+`scripts/run_pipeline.py`
+
+- orchestrates the entire pipeline and bootstrap flow
+
+`static/index.html`
+
+- visual control room for the application
+
+`tests/test_psx_pipeline.py`
+
+- automated safety net for core backend and pipeline behavior
+
+`README.md`
+
+- onboarding and operational documentation
+
+`Procfile`
+
+- deployment startup contract
+
+`requirements.txt`
+
+- dependency definition for runtime and deployment
+
+`data/raw/*`
+
+- base and active historical raw market inputs
+
+`data/processed/*`
+
+- cleaned and feature-rich operational datasets
+
+`models/*`
+
+- current and historical trained model artifacts plus registry metadata
+
+
+========================================================================
+12. FINAL JUDGMENT
+========================================================================
+
+This is now a good-quality full-stack applied ML project with real engineering
+substance.
+
+It demonstrates:
+
+- data engineering
+- feature engineering
+- model training
+- API design
+- dashboard work
+- admin workflow design
+- operational thinking
+- documentation and testing discipline
+
+As of 2026-04-19, it is:
+
+- clearly above basic project level
+- suitable as a strong portfolio project
+- suitable for careful single-instance deployment
+- not yet fully hardened for high-scale or enterprise production
+
+If the next round focuses on:
+
+- local frontend asset bundling
+- proper job queue execution
+- stronger persistence design
+- more complete test coverage
+
+then this project can move from a strong advanced MVP into a much more
+production-grade engineering artifact.

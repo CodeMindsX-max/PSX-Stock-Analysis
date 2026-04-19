@@ -43,20 +43,25 @@ class CleanFeatureTrainTests(TestCase):
             featured_path = root / "featured.csv"
             model_path = root / "model.pkl"
 
-            dates = pd.date_range("2024-01-01", periods=40, freq="D")
+            dates = pd.date_range("2024-01-01", periods=60, freq="B")
             seed_frame = pd.DataFrame({
-                "Date": [date.strftime("%d-%b-%y") for date in dates[:35]],
-                "Open": [100 + index for index in range(35)],
-                "High": [102 + index for index in range(35)],
-                "Low": [99 + index for index in range(35)],
-                "Close": [101 + index + ((-1) ** index) for index in range(35)],
-                "Change": [((-1) ** index) * 1.0 for index in range(35)],
-                "Volume": [1_000_000 + (index * 1000) for index in range(35)],
+                "Date": [date.strftime("%d-%b-%y") for date in dates[:50]],
+                "Open": [100 + index for index in range(50)],
+                "High": [102 + index for index in range(50)],
+                "Low": [99 + index for index in range(50)],
+                "Close": [101 + index + ((-1) ** index) for index in range(50)],
+                "Change": [((-1) ** index) * 1.0 for index in range(50)],
+                "Volume": [1_000_000 + (index * 1000) for index in range(50)],
+                "Ticker": ["KSE100"] * 50,
             })
             seed_frame.to_csv(seed_path, index=False)
 
             live_frame = pd.DataFrame({
-                "Date": [dates[34].strftime("%d-%b-%y"), dates[35].strftime("%d-%b-%y"), dates[39].strftime("%d-%b-%y")],
+                "Date": [
+                    dates[49].strftime("%d-%b-%y"),
+                    dates[50].strftime("%d-%b-%y"),
+                    dates[59].strftime("%d-%b-%y"),
+                ],
                 "Open": [300.0, 301.0, 305.0],
                 "High": [303.0, 304.0, 309.0],
                 "Low": [299.0, 300.0, 304.0],
@@ -68,18 +73,24 @@ class CleanFeatureTrainTests(TestCase):
             live_frame.to_csv(live_path, index=False)
 
             cleaned = clean_data(live_path, cleaned_path, history_path=seed_path, merged_output_path=merged_path)
-            self.assertIsNotNone(cleaned)
-            self.assertEqual(len(cleaned), 37)
-            self.assertEqual(cleaned["Date"].iloc[-1], "2024-02-09")
+            self.assertEqual(len(cleaned), 52)
+            self.assertEqual(cleaned["Date"].iloc[-1], dates[59].strftime("%Y-%m-%d"))
+            self.assertIn("Ticker", cleaned.columns)
+            self.assertIn("Fetched_At", cleaned.columns)
 
             featured = create_features(cleaned_path, featured_path)
-            self.assertIsNotNone(featured)
             self.assertIn("Target", featured.columns)
+            self.assertIn("RSI_14", featured.columns)
+            self.assertIn("MACD", featured.columns)
+            self.assertIn("Days_Since_Last_Trade", featured.columns)
 
             model_bundle = train_model(featured_path, model_path)
-            self.assertIsNotNone(model_bundle)
             self.assertTrue(model_bundle["training_completed"])
             self.assertNotIn("Open", model_bundle["feature_columns"])
+            self.assertIn("holdout", model_bundle["metrics"])
+            self.assertIn("walk_forward_folds", model_bundle["metrics"])
+            self.assertIn("model_version", model_bundle)
+            self.assertIn("latest_prediction_probabilities", model_bundle)
 
 
 class FileManagementTests(TestCase):
@@ -119,12 +130,32 @@ class FileManagementTests(TestCase):
 
 
 class AppRouteTests(TestCase):
-    def test_file_listing_route_works(self):
+    def test_health_route_works(self):
         client = app_module.app.test_client()
-        response = client.get("/api/files")
+        response = client.get("/health")
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
-        self.assertIn("raw", payload)
-        self.assertIn("processed", payload)
-        self.assertIn("models", payload)
+        self.assertIn("pipeline_status", payload)
+        self.assertIn("admin_configured", payload)
+
+    def test_admin_routes_require_token(self):
+        client = app_module.app.test_client()
+
+        with mock.patch.object(app_module, "ADMIN_TOKEN", "secret-token"):
+            unauthorized_response = client.get("/api/files")
+            self.assertEqual(unauthorized_response.status_code, 401)
+
+            authorized_response = client.get("/api/files", headers={"X-Admin-Token": "secret-token"})
+            self.assertEqual(authorized_response.status_code, 200)
+
+    def test_pipeline_run_returns_accepted_when_background_job_starts(self):
+        client = app_module.app.test_client()
+
+        with mock.patch.object(app_module, "ADMIN_TOKEN", "secret-token"), \
+             mock.patch.object(app_module, "start_pipeline_job", return_value=True):
+            response = client.post("/api/pipeline/run", headers={"X-Admin-Token": "secret-token"})
+
+        self.assertEqual(response.status_code, 202)
+        payload = response.get_json()
+        self.assertIn("message", payload)

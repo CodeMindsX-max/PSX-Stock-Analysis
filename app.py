@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import logging
 import os
 import pickle
 import threading
@@ -10,16 +12,33 @@ from flask import Flask, jsonify, request, send_from_directory
 from scripts.pipeline_utils import (
     BASE_DIR,
     CURRENT_FEATURED_PATH,
-    CURRENT_MODEL_PATH,
     delete_managed_file,
     list_managed_files,
     preview_managed_file,
+    resolve_active_model_path,
 )
-from scripts.run_pipeline import run_full_pipeline
+from scripts.run_pipeline import bootstrap_local_artifacts, run_full_pipeline
 
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+LOGGER = logging.getLogger(__name__)
 
 app = Flask(__name__)
+ADMIN_TOKEN = os.getenv("PSX_ADMIN_TOKEN", "").strip()
 PIPELINE_LOCK = threading.Lock()
+CACHE_LOCK = threading.Lock()
+PIPELINE_STATE_LOCK = threading.Lock()
+
+MODEL_CACHE: dict[str, object] = {"path": None, "mtime": None, "bundle": None, "error": None}
+DATA_CACHE: dict[str, object] = {"path": CURRENT_FEATURED_PATH, "mtime": None, "dataframe": None, "error": None}
+PIPELINE_STATE: dict[str, object] = {
+    "status": "idle",
+    "running": False,
+    "started_at": None,
+    "finished_at": None,
+    "last_error": None,
+    "last_summary": None,
+}
 
 
 def normalize_value(value):
@@ -50,43 +69,139 @@ def dataframe_to_records(dataframe):
     return records
 
 
-def load_model_bundle():
-    if not CURRENT_MODEL_PATH.exists():
+def get_pipeline_state() -> dict[str, object]:
+    with PIPELINE_STATE_LOCK:
+        return dict(PIPELINE_STATE)
+
+
+def update_pipeline_state(**updates) -> dict[str, object]:
+    with PIPELINE_STATE_LOCK:
+        PIPELINE_STATE.update(updates)
+        return dict(PIPELINE_STATE)
+
+
+def has_admin_token_configured() -> bool:
+    return bool(ADMIN_TOKEN)
+
+
+def require_admin_token(route_function):
+    @functools.wraps(route_function)
+    def wrapper(*args, **kwargs):
+        if not has_admin_token_configured():
+            return jsonify({"error": "Admin token is not configured on the server."}), 503
+
+        provided_token = request.headers.get("X-Admin-Token", "").strip()
+        if provided_token != ADMIN_TOKEN:
+            return jsonify({"error": "Unauthorized admin request."}), 401
+
+        return route_function(*args, **kwargs)
+
+    return wrapper
+
+
+def load_model_bundle(force_reload: bool = False):
+    model_path = resolve_active_model_path()
+    if not model_path.exists():
         return None, "Model file not found. Run the pipeline first."
 
     try:
-        with open(CURRENT_MODEL_PATH, "rb") as model_file:
-            model_bundle = pickle.load(model_file)
-    except Exception as error:
-        return None, f"Could not load model file: {error}"
+        modified_time = model_path.stat().st_mtime
+    except OSError as error:
+        return None, f"Could not read model metadata: {error}"
 
-    if "model" not in model_bundle:
-        return None, "Saved model bundle is missing the trained model."
+    with CACHE_LOCK:
+        cached_bundle = MODEL_CACHE.get("bundle")
+        if (
+            not force_reload
+            and cached_bundle is not None
+            and MODEL_CACHE.get("path") == str(model_path)
+            and MODEL_CACHE.get("mtime") == modified_time
+        ):
+            return cached_bundle, MODEL_CACHE.get("error")
 
-    feature_columns = model_bundle.get("feature_columns")
-    if feature_columns is None:
-        feature_columns = model_bundle.get("features")
+        try:
+            with open(model_path, "rb") as model_file:
+                model_bundle = pickle.load(model_file)
+        except Exception as error:
+            MODEL_CACHE.update({
+                "path": str(model_path),
+                "mtime": modified_time,
+                "bundle": None,
+                "error": f"Could not load model file: {error}",
+            })
+            return None, MODEL_CACHE["error"]
 
-    if not feature_columns:
-        return None, "Saved model bundle is missing feature column metadata."
+        if "model" not in model_bundle:
+            MODEL_CACHE.update({
+                "path": str(model_path),
+                "mtime": modified_time,
+                "bundle": None,
+                "error": "Saved model bundle is missing the trained model.",
+            })
+            return None, MODEL_CACHE["error"]
 
-    model_bundle["feature_columns"] = list(feature_columns)
-    return model_bundle, None
+        feature_columns = model_bundle.get("feature_columns") or model_bundle.get("features")
+        if not feature_columns:
+            MODEL_CACHE.update({
+                "path": str(model_path),
+                "mtime": modified_time,
+                "bundle": None,
+                "error": "Saved model bundle is missing feature column metadata.",
+            })
+            return None, MODEL_CACHE["error"]
+
+        model_bundle["feature_columns"] = list(feature_columns)
+        MODEL_CACHE.update({
+            "path": str(model_path),
+            "mtime": modified_time,
+            "bundle": model_bundle,
+            "error": None,
+        })
+        return model_bundle, None
 
 
-def load_featured_data():
+def load_featured_data(force_reload: bool = False):
     if not CURRENT_FEATURED_PATH.exists():
         return None, "Processed feature data not found. Run the pipeline first."
 
     try:
-        dataframe = pd.read_csv(CURRENT_FEATURED_PATH)
-    except Exception as error:
-        return None, f"Could not load processed data: {error}"
+        modified_time = CURRENT_FEATURED_PATH.stat().st_mtime
+    except OSError as error:
+        return None, f"Could not read processed data metadata: {error}"
 
-    if "Date" in dataframe.columns:
-        dataframe["Date"] = pd.to_datetime(dataframe["Date"], errors="coerce")
+    with CACHE_LOCK:
+        cached_frame = DATA_CACHE.get("dataframe")
+        if (
+            not force_reload
+            and cached_frame is not None
+            and DATA_CACHE.get("mtime") == modified_time
+        ):
+            return cached_frame, DATA_CACHE.get("error")
 
-    return dataframe, None
+        try:
+            dataframe = pd.read_csv(CURRENT_FEATURED_PATH)
+        except Exception as error:
+            DATA_CACHE.update({
+                "mtime": modified_time,
+                "dataframe": None,
+                "error": f"Could not load processed data: {error}",
+            })
+            return None, DATA_CACHE["error"]
+
+        if "Date" in dataframe.columns:
+            dataframe["Date"] = pd.to_datetime(dataframe["Date"], errors="coerce")
+
+        DATA_CACHE.update({
+            "mtime": modified_time,
+            "dataframe": dataframe,
+            "error": None,
+        })
+        return dataframe, None
+
+
+def refresh_runtime_cache(force_reload: bool = True) -> None:
+    load_featured_data(force_reload=force_reload)
+    load_model_bundle(force_reload=force_reload)
 
 
 def build_latest_input(model_bundle):
@@ -122,6 +237,57 @@ def build_latest_input(model_bundle):
     return latest_row[feature_columns], None
 
 
+def run_pipeline_background_job() -> None:
+    update_pipeline_state(
+        status="running",
+        running=True,
+        started_at=pd.Timestamp.now(tz="UTC").isoformat(),
+        finished_at=None,
+        last_error=None,
+    )
+    LOGGER.info("Background pipeline execution started.")
+
+    try:
+        summary = run_full_pipeline()
+        refresh_runtime_cache(force_reload=True)
+        update_pipeline_state(
+            status="completed",
+            running=False,
+            finished_at=pd.Timestamp.now(tz="UTC").isoformat(),
+            last_summary=summary,
+        )
+        LOGGER.info("Background pipeline execution completed successfully.")
+    except Exception as error:
+        update_pipeline_state(
+            status="failed",
+            running=False,
+            finished_at=pd.Timestamp.now(tz="UTC").isoformat(),
+            last_error=str(error),
+        )
+        LOGGER.exception("Background pipeline execution failed: %s", error)
+    finally:
+        PIPELINE_LOCK.release()
+
+
+def start_pipeline_job():
+    if not PIPELINE_LOCK.acquire(blocking=False):
+        return False
+
+    thread = threading.Thread(target=run_pipeline_background_job, daemon=True)
+    thread.start()
+    return True
+
+
+def bootstrap_runtime_state() -> None:
+    try:
+        summary = bootstrap_local_artifacts()
+        if any(summary.values()):
+            LOGGER.info("Bootstrap summary: %s", summary)
+        refresh_runtime_cache(force_reload=True)
+    except Exception as error:
+        LOGGER.warning("Runtime bootstrap could not finish: %s", error)
+
+
 @app.route("/")
 @app.route("/dashboard")
 def dashboard():
@@ -133,6 +299,7 @@ def dashboard():
 def health():
     model_bundle, model_error = load_model_bundle()
     _, data_error = load_featured_data()
+    pipeline_state = get_pipeline_state()
 
     return jsonify({
         "message": "PSX AI API is running",
@@ -140,9 +307,19 @@ def health():
         "data_ready": data_error is None,
         "model_error": model_error,
         "data_error": data_error,
-        "pipeline_busy": PIPELINE_LOCK.locked(),
+        "pipeline_busy": pipeline_state["running"],
+        "pipeline_status": pipeline_state["status"],
+        "pipeline_started_at": pipeline_state["started_at"],
+        "pipeline_finished_at": pipeline_state["finished_at"],
+        "pipeline_error": pipeline_state["last_error"],
         "warnings": [] if model_error else (model_bundle.get("warnings") or []),
+        "admin_configured": has_admin_token_configured(),
     })
+
+
+@app.route("/api/pipeline/status", methods=["GET"])
+def api_pipeline_status():
+    return jsonify(get_pipeline_state())
 
 
 @app.route("/data", methods=["GET"])
@@ -169,7 +346,9 @@ def predict():
 
     try:
         prediction = int(model_bundle["model"].predict(latest_input)[0])
+        probabilities = model_bundle["model"].predict_proba(latest_input)[0]
     except Exception as error:
+        LOGGER.exception("Prediction failed: %s", error)
         return jsonify({"error": f"Prediction failed: {error}"}), 500
 
     result = "UP" if prediction == 1 else "DOWN"
@@ -177,10 +356,15 @@ def predict():
     return jsonify({
         "prediction": result,
         "prediction_value": prediction,
+        "prediction_probability_down": float(probabilities[0]),
+        "prediction_probability_up": float(probabilities[1]),
+        "confidence": float(max(probabilities)),
+        "model_version": model_bundle.get("model_version"),
         "latest_row_date": model_bundle.get("latest_row_date"),
         "feature_columns": model_bundle["feature_columns"],
         "latest_features": model_bundle.get("latest_features"),
         "warnings": model_bundle.get("warnings") or [],
+        "metrics": model_bundle.get("metrics") or {},
     })
 
 
@@ -199,19 +383,21 @@ def insights():
         }), 400
 
     insights_payload = {
-        "average_return": normalize_value(dataframe["Return"].mean()),
-        "average_volatility": normalize_value(dataframe["Volatility"].mean()),
+        "average_return": normalize_value(dataframe["Return"].dropna().mean()),
+        "average_volatility": normalize_value(dataframe["Volatility"].dropna().mean()),
     }
 
     return jsonify(insights_payload)
 
 
 @app.route("/api/files", methods=["GET"])
+@require_admin_token
 def api_files():
     return jsonify(list_managed_files())
 
 
 @app.route("/api/files/preview", methods=["GET"])
+@require_admin_token
 def api_file_preview():
     category = request.args.get("category", "").strip()
     filename = request.args.get("filename", "").strip()
@@ -226,10 +412,12 @@ def api_file_preview():
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     except Exception as error:
+        LOGGER.exception("Could not preview managed file: %s", error)
         return jsonify({"error": f"Could not preview file: {error}"}), 500
 
 
 @app.route("/api/files/delete", methods=["POST"])
+@require_admin_token
 def api_delete_file():
     payload = request.get_json(silent=True) or {}
     category = str(payload.get("category", "")).strip()
@@ -240,6 +428,7 @@ def api_delete_file():
 
     try:
         deleted = delete_managed_file(category, filename)
+        LOGGER.info("Deleted managed file %s/%s", category, filename)
         return jsonify({
             "message": "File deleted successfully.",
             "deleted": deleted,
@@ -250,23 +439,24 @@ def api_delete_file():
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     except Exception as error:
+        LOGGER.exception("Could not delete managed file: %s", error)
         return jsonify({"error": f"Could not delete file: {error}"}), 500
 
 
 @app.route("/api/pipeline/run", methods=["POST"])
+@require_admin_token
 def api_run_pipeline():
-    if not PIPELINE_LOCK.acquire(blocking=False):
-        return jsonify({"error": "Pipeline is already running."}), 409
+    if not start_pipeline_job():
+        return jsonify({"error": "Pipeline is already running.", "status": get_pipeline_state()}), 409
 
-    try:
-        summary = run_full_pipeline()
-        return jsonify(summary)
-    except Exception as error:
-        return jsonify({"error": f"Pipeline failed: {error}"}), 500
-    finally:
-        PIPELINE_LOCK.release()
+    return jsonify({
+        "message": "Pipeline started in the background.",
+        "status": get_pipeline_state(),
+    }), 202
+
+
+bootstrap_runtime_state()
 
 
 if __name__ == "__main__":
-    # app.run(debug=True)
     app.run()

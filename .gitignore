@@ -1,116 +1,57 @@
-# ==============================
-# 🐍 Python
-# ==============================
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# ==============================
-# 🧪 Virtual Environments
-# ==============================
 venv/
 env/
 ENV/
 .venv/
 
-# ==============================
-# 📓 Jupyter Notebook
-# ==============================
 .ipynb_checkpoints/
-
-# ==============================
-# 🧾 Logs & Temporary Files
-# ==============================
+.cache/
 *.log
 *.tmp
 *.temp
 *.swp
 *.bak
-
-# ==============================
-# 💻 OS Files
-# ==============================
-.DS_Store
-Thumbs.db
-
-# ==============================
-# 🔐 Environment & Secrets
-# ==============================
-.env
-.env.*
-*.env
-
-# ==============================
-# 📊 Data Files (IMPORTANT)
-# ==============================
-# Raw and large datasets (keep structure, not data)
-data/raw/*
-data/processed/*
-
-# But keep folder structure
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-
-# ==============================
-# 📈 Outputs (plots, reports)
-# ==============================
-outputs/*
-!outputs/.gitkeep
-
-# ==============================
-# 🧠 Model Files (future ML)
-# ==============================
-*.pkl
-*.joblib
-*.h5
-*.model
-
-# ==============================
-# 📦 IDE / Editor Settings
-# ==============================
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-
-# ==============================
-# 🧪 Testing / Coverage
-# ==============================
 .coverage
 coverage.xml
 htmlcov/
 
-# ==============================
-# ⚙️ Cache Files
-# ==============================
-.cache/
-*.cache
+.env
+.env.*
+*.env
 
-# ==============================
-# 🧬 Misc
-# ==============================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+
+outputs/*
+!outputs/.gitkeep
+
+*.joblib
+*.h5
+*.model
 *.sqlite3
 *.db
 
-data/raw/.gitkeep
-data/processed/.gitkeep
-models/.gitkeep
-notebooks/.gitkeep
+data/raw/*
+data/processed/*
+models/*
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!models/.gitkeep
+!data/raw/Stock Exchange KSE 100(Pakistan).csv
+!data/raw/market_history_current.csv
+!data/processed/cleaned_data.csv
+!data/processed/featured_data.csv
+!models/model_registry.json

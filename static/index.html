@@ -1,12 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PSX AI Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -22,8 +19,8 @@
                         coral: "#fb7185",
                     },
                     fontFamily: {
-                        display: ["Space Grotesk", "sans-serif"],
-                        body: ["IBM Plex Sans", "sans-serif"],
+                        display: ["Trebuchet MS", "Segoe UI", "sans-serif"],
+                        body: ["Segoe UI", "Tahoma", "Arial", "sans-serif"],
                     },
                     boxShadow: {
                         panel: "0 18px 60px rgba(4, 17, 29, 0.38)",
@@ -43,19 +40,12 @@
             min-height: 100%;
         }
 
-        @media (min-width: 1024px) {
-            html,
-            body {
-                height: 100%;
-                overflow: hidden;
-            }
-        }
-
         body {
             background:
                 radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 28%),
                 radial-gradient(circle at top right, rgba(245, 158, 11, 0.14), transparent 30%),
                 linear-gradient(180deg, #04111d 0%, #081726 45%, #0b1c2e 100%);
+            overflow-x: clip;
         }
 
         .glass {
@@ -90,8 +80,56 @@
             scrollbar-color: rgba(56, 189, 248, 0.26) transparent;
         }
 
+        .dashboard-shell,
+        .dashboard-grid,
+        .nav-grid,
+        .modal-grid,
+        .summary-grid,
+        .status-stack,
+        .sync-panel {
+            min-width: 0;
+        }
+
+        .dashboard-grid > *,
+        .nav-grid > *,
+        .modal-grid > *,
+        .sync-panel > * {
+            min-width: 0;
+        }
+
+        .chart-frame {
+            position: relative;
+            min-height: clamp(220px, 32vw, 360px);
+            width: 100%;
+        }
+
+        .table-responsive {
+            width: 100%;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+
+        .table-responsive table {
+            min-width: 42rem;
+        }
+
+        .safe-wrap {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .modal-shell {
+            width: min(100%, 72rem);
+            max-height: min(88vh, 980px);
+        }
+
+        .modal-grid {
+            min-height: 0;
+        }
+
         .metric-value {
-            font-size: clamp(1.5rem, 2vw, 2.15rem);
+            font-size: clamp(1.5rem, 3vw, 2.15rem);
+            line-height: 1.1;
         }
 
         @media (min-width: 1024px) and (max-height: 840px) {
@@ -116,24 +154,41 @@
                 padding-bottom: 0.95rem;
             }
         }
+
+        @media (max-width: 1279px) {
+            .dashboard-grid,
+            .modal-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .table-responsive table {
+                min-width: 38rem;
+            }
+
+            .modal-shell {
+                max-height: calc(100vh - 1.5rem);
+            }
+        }
     </style>
 </head>
-<body class="overflow-x-hidden font-body text-slate-100 antialiased lg:overflow-hidden">
+<body class="font-body text-slate-100 antialiased">
     <div class="pointer-events-none fixed inset-0 mesh opacity-40"></div>
 
-    <div class="relative mx-auto max-w-[1500px] px-3 py-3 sm:px-4 sm:py-4 lg:h-screen lg:px-5 lg:py-4">
-        <div class="compact-gap flex min-h-screen flex-col gap-3 lg:h-[calc(100vh-2rem)] lg:min-h-0 lg:min-h-[700px]">
+    <div class="relative mx-auto w-full max-w-[1500px] px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-4">
+        <div class="compact-gap flex min-h-screen flex-col gap-3">
             <nav class="glass compact-nav shrink-0 rounded-[1.6rem] px-4 py-4 sm:px-5 lg:px-6">
-                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:gap-6">
+                <div class="nav-grid grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] xl:items-start">
+                    <div class="status-stack flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:gap-6">
                         <div class="flex items-center gap-3">
                             <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky/30 via-sky/10 to-transparent ring-1 ring-sky/20">
                                 <span class="font-display text-lg text-sky">PSX</span>
                             </div>
-                            <div>
+                            <div class="min-w-0">
                                 <p class="text-[11px] uppercase tracking-[0.28em] text-sky/80">Flask Prediction Desk</p>
                                 <h1 class="mt-1 font-display text-xl text-white sm:text-2xl">PSX AI Live Dashboard</h1>
-                                <p class="mt-1 text-xs text-slate-400 sm:text-sm">Laptop-first layout with live model signal, trends, and compact panels.</p>
+                                <p class="mt-1 text-xs text-slate-400 sm:text-sm">Responsive market view with live model signal, trends, and managed artifacts.</p>
                             </div>
                         </div>
 
@@ -141,11 +196,12 @@
                             <span id="apiStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">API status pending</span>
                             <span id="modelStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Model pending</span>
                             <span id="dataStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Data pending</span>
+                            <span id="adminStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Admin locked</span>
                             <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300">Auto refresh 30s</span>
                         </div>
                     </div>
 
-                    <div class="grid gap-3 lg:min-w-[24rem] lg:max-w-[31rem]">
+                    <div class="sync-panel grid gap-3">
                         <div>
                             <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">System Sync</p>
                             <p id="lastUpdated" class="mt-1 text-sm font-semibold text-white sm:text-base">Waiting for first update</p>
@@ -158,9 +214,12 @@
                             </div>
                         </div>
 
-                        <div class="grid gap-2 sm:grid-cols-3">
+                        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                             <button id="refreshButton" class="rounded-2xl border border-sky/20 bg-sky px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky/90">
                                 Refresh
+                            </button>
+                            <button id="adminTokenButton" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/10">
+                                Admin Access
                             </button>
                             <button id="runPipelineButton" class="rounded-2xl border border-mint/20 bg-mint/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-mint/20">
                                 Fetch Live
@@ -174,8 +233,8 @@
                 </div>
             </nav>
 
-            <main class="compact-gap flex flex-1 flex-col gap-3 lg:min-h-0">
-                <section class="compact-gap grid shrink-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <main class="dashboard-shell compact-gap flex flex-1 flex-col gap-3">
+                <section class="summary-grid compact-gap grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <article class="glass compact-card rounded-[1.5rem] p-4 sm:p-5">
                         <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Live Prediction</p>
                         <div class="compact-card-title mt-3 flex items-start justify-between gap-3">
@@ -206,9 +265,9 @@
                     </article>
                 </section>
 
-                <section class="compact-gap grid flex-1 gap-3 lg:min-h-0 lg:grid-cols-[1.08fr_0.92fr]">
-                    <div class="compact-gap grid gap-3 lg:min-h-0 lg:grid-rows-[minmax(0,0.96fr)_minmax(0,1.04fr)]">
-                        <article class="glass compact-card flex min-h-[250px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
+                <section class="dashboard-grid compact-gap grid gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+                    <div class="compact-gap grid gap-3 content-start">
+                        <article class="glass compact-card flex min-h-[250px] flex-col rounded-[1.6rem] p-4 sm:p-5">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Direction Trend</p>
@@ -218,24 +277,24 @@
                                     The newest point switches to the live prediction when the last row is still unlabeled.
                                 </p>
                             </div>
-                            <div class="compact-chart-space mt-4 min-h-[180px] flex-1 lg:min-h-0">
+                            <div class="chart-frame compact-chart-space mt-4">
                                 <canvas id="directionChart"></canvas>
                             </div>
                         </article>
 
-                        <article class="glass compact-card flex min-h-[260px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
+                        <article class="glass compact-card flex min-h-[260px] flex-col rounded-[1.6rem] p-4 sm:p-5">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Recent Sessions</p>
                                     <h2 class="mt-1 font-display text-lg text-white sm:text-xl">Processed market records</h2>
                                 </div>
                                 <p class="max-w-sm text-xs leading-6 text-slate-300 sm:text-sm">
-                                    This panel scrolls internally so the whole dashboard stays on one screen on laptop.
+                                    The table stays inside its panel and gains horizontal scroll when the screen gets tighter.
                                 </p>
                             </div>
 
-                            <div class="data-scroll mt-4 flex-1 overflow-auto rounded-[1.25rem] border border-white/10 bg-slate-950/30">
-                                <table class="min-w-full divide-y divide-white/10 text-left text-sm">
+                            <div class="table-responsive data-scroll mt-4 flex-1 rounded-[1.25rem] border border-white/10 bg-slate-950/30">
+                                <table class="w-max min-w-full divide-y divide-white/10 text-left text-sm">
                                     <thead class="sticky top-0 bg-slate-950/90 text-[11px] uppercase tracking-[0.22em] text-slate-400 backdrop-blur">
                                         <tr>
                                             <th class="px-4 py-3">Date</th>
@@ -252,29 +311,29 @@
                         </article>
                     </div>
 
-                    <div class="compact-gap grid gap-3 lg:min-h-0 lg:grid-rows-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                        <article class="glass compact-card flex min-h-[250px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
-                            <div class="flex items-end justify-between gap-3">
+                    <div class="compact-gap grid gap-3 content-start">
+                        <article class="glass compact-card flex min-h-[250px] flex-col rounded-[1.6rem] p-4 sm:p-5">
+                            <div class="flex flex-wrap items-end justify-between gap-3">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Market Structure</p>
                                     <h2 class="mt-1 font-display text-lg text-white sm:text-xl">Close versus volume</h2>
                                 </div>
                                 <span class="rounded-full border border-ember/20 bg-ember/10 px-3 py-1 text-[11px] font-semibold text-amber-200">Recent sessions</span>
                             </div>
-                            <div class="compact-chart-space mt-4 min-h-[180px] flex-1 lg:min-h-0">
+                            <div class="chart-frame compact-chart-space mt-4">
                                 <canvas id="priceChart"></canvas>
                             </div>
                         </article>
 
-                        <article class="glass compact-card flex min-h-[260px] flex-col rounded-[1.6rem] p-4 sm:p-5 lg:min-h-0">
-                            <div class="flex items-end justify-between gap-3">
-                                <div>
+                        <article class="glass compact-card flex min-h-[260px] flex-col rounded-[1.6rem] p-4 sm:p-5">
+                            <div class="flex flex-wrap items-end justify-between gap-3">
+                                <div class="min-w-0">
                                     <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Feature Snapshot</p>
                                     <h2 class="mt-1 font-display text-lg text-white sm:text-xl">Latest row for prediction</h2>
                                 </div>
-                                <span id="snapshotDate" class="text-xs text-slate-300 sm:text-sm">--</span>
+                                <span id="snapshotDate" class="safe-wrap text-xs text-slate-300 sm:text-sm">--</span>
                             </div>
-                            <div id="snapshotGrid" class="panel-scroll mt-4 grid flex-1 auto-rows-fr gap-3 overflow-auto sm:grid-cols-2 lg:min-h-0 xl:grid-cols-3"></div>
+                            <div id="snapshotGrid" class="panel-scroll mt-4 grid flex-1 auto-rows-fr gap-3 overflow-auto sm:grid-cols-2 2xl:grid-cols-3"></div>
                         </article>
                     </div>
                 </section>
@@ -283,13 +342,13 @@
     </div>
 
     <div id="fileManagerModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/72 p-4 backdrop-blur-sm">
-        <div class="glass flex h-[min(88vh,760px)] w-full max-w-6xl flex-col rounded-[1.75rem]">
-            <div class="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-6">
-                <div>
+        <div class="modal-shell glass flex flex-col rounded-[1.75rem]">
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-6">
+                <div class="min-w-0">
                     <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">File Manager</p>
                     <h2 class="mt-1 font-display text-xl text-white">Raw, processed, and model artifacts</h2>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <button id="refreshFilesButton" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">
                         Refresh Files
                     </button>
@@ -299,18 +358,18 @@
                 </div>
             </div>
 
-            <div class="grid flex-1 gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:grid-cols-[0.95fr_1.05fr]">
+            <div class="modal-grid grid flex-1 gap-4 overflow-hidden px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
                 <div class="panel-scroll overflow-auto rounded-[1.25rem] border border-white/10 bg-slate-950/30 p-3">
                     <div id="fileSections" class="space-y-4"></div>
                 </div>
 
                 <div class="panel-scroll overflow-auto rounded-[1.25rem] border border-white/10 bg-slate-950/30 p-4">
-                    <div class="flex items-center justify-between gap-3">
-                        <div>
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="min-w-0">
                             <p class="text-[11px] uppercase tracking-[0.24em] text-slate-400">Preview</p>
-                            <h3 id="previewTitle" class="mt-1 text-lg font-semibold text-white">Select a file</h3>
+                            <h3 id="previewTitle" class="safe-wrap mt-1 text-lg font-semibold text-white">Select a file</h3>
                         </div>
-                        <span id="previewMeta" class="text-xs text-slate-400"></span>
+                        <span id="previewMeta" class="safe-wrap text-xs text-slate-400"></span>
                     </div>
                     <div id="previewBody" class="mt-4 text-sm text-slate-300">
                         Choose a file from the left to preview it here.
@@ -322,16 +381,20 @@
 
     <script>
         const REFRESH_SECONDS = 30;
+        const ADMIN_TOKEN_STORAGE_KEY = "psxAdminToken";
         let secondsUntilRefresh = REFRESH_SECONDS;
         let directionChart = null;
         let priceChart = null;
         let refreshInProgress = false;
+        let pipelinePollHandle = null;
+        let latestHealthPayload = null;
 
         const chartTextColor = "#cbd5e1";
         const chartGridColor = "rgba(148, 163, 184, 0.12)";
 
         const elements = {
             refreshButton: document.getElementById("refreshButton"),
+            adminTokenButton: document.getElementById("adminTokenButton"),
             runPipelineButton: document.getElementById("runPipelineButton"),
             manageFilesButton: document.getElementById("manageFilesButton"),
             closeFilesButton: document.getElementById("closeFilesButton"),
@@ -343,6 +406,7 @@
             apiStatus: document.getElementById("apiStatus"),
             modelStatus: document.getElementById("modelStatus"),
             dataStatus: document.getElementById("dataStatus"),
+            adminStatus: document.getElementById("adminStatus"),
             predictionLabel: document.getElementById("predictionLabel"),
             predictionDate: document.getElementById("predictionDate"),
             predictionBadge: document.getElementById("predictionBadge"),
@@ -406,8 +470,61 @@
             ].join(" ");
         }
 
-        async function fetchJson(path) {
-            const response = await fetch(path, { cache: "no-store" });
+        function getAdminToken() {
+            return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
+        }
+
+        function setAdminToken(token) {
+            const normalizedToken = String(token || "").trim();
+            if (normalizedToken) {
+                window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, normalizedToken);
+            } else {
+                window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+            }
+        }
+
+        function getAdminHeaders() {
+            const token = getAdminToken();
+            return token ? { "X-Admin-Token": token } : {};
+        }
+
+        function hasUsableAdminAccess() {
+            return Boolean(latestHealthPayload?.admin_configured && getAdminToken());
+        }
+
+        function updateAdminUi(healthPayload = latestHealthPayload) {
+            latestHealthPayload = healthPayload || latestHealthPayload;
+            const adminConfigured = Boolean(latestHealthPayload?.admin_configured);
+            const hasToken = Boolean(getAdminToken());
+            const canUseAdmin = adminConfigured && hasToken;
+            const pipelineRunning = Boolean(latestHealthPayload?.pipeline_busy);
+
+            setStatusChip(
+                elements.adminStatus,
+                canUseAdmin,
+                "Admin ready",
+                adminConfigured ? "Admin locked" : "Admin disabled"
+            );
+
+            elements.adminTokenButton.textContent = hasToken ? "Update Token" : "Admin Access";
+            elements.runPipelineButton.disabled = !canUseAdmin || pipelineRunning;
+            elements.manageFilesButton.disabled = !canUseAdmin;
+            elements.refreshFilesButton.disabled = !canUseAdmin;
+
+            ["runPipelineButton", "manageFilesButton", "refreshFilesButton"].forEach((key) => {
+                elements[key].classList.toggle("opacity-50", elements[key].disabled);
+                elements[key].classList.toggle("cursor-not-allowed", elements[key].disabled);
+            });
+        }
+
+        async function fetchJson(path, options = {}) {
+            const response = await fetch(path, {
+                cache: "no-store",
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                },
+            });
             const payload = await response.json().catch(() => ({}));
 
             if (!response.ok) {
@@ -417,11 +534,12 @@
             return payload;
         }
 
-        async function postJson(path, payload = {}) {
+        async function postJson(path, payload = {}, options = {}) {
             const response = await fetch(path, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    ...(options.headers || {}),
                 },
                 body: JSON.stringify(payload),
             });
@@ -432,6 +550,26 @@
             }
 
             return body;
+        }
+
+        async function fetchAdminJson(path, options = {}) {
+            return fetchJson(path, {
+                ...options,
+                headers: {
+                    ...getAdminHeaders(),
+                    ...(options.headers || {}),
+                },
+            });
+        }
+
+        async function postAdminJson(path, payload = {}, options = {}) {
+            return postJson(path, payload, {
+                ...options,
+                headers: {
+                    ...getAdminHeaders(),
+                    ...(options.headers || {}),
+                },
+            });
         }
 
         function buildTrendSeries(rows, predictionPayload) {
@@ -640,7 +778,6 @@
         function renderSnapshotGrid(predictionPayload) {
             const latestFeatures = predictionPayload.latest_features || {};
             const rows = [
-                ["Open", formatNumber(latestFeatures.Open)],
                 ["High", formatNumber(latestFeatures.High)],
                 ["Low", formatNumber(latestFeatures.Low)],
                 ["Close", formatNumber(latestFeatures.Close)],
@@ -649,6 +786,10 @@
                 ["MA 7", formatNumber(latestFeatures.MA_7)],
                 ["MA 30", formatNumber(latestFeatures.MA_30)],
                 ["Volatility", formatNumber(latestFeatures.Volatility)],
+                ["RSI 14", formatNumber(latestFeatures.RSI_14)],
+                ["MACD", formatNumber(latestFeatures.MACD)],
+                ["Gap Days", formatNumber(latestFeatures.Days_Since_Last_Trade, 0)],
+                ["Model Version", predictionPayload.model_version || "--"],
             ];
 
             elements.snapshotDate.textContent = predictionPayload.latest_row_date || "--";
@@ -693,6 +834,26 @@
             }).join("");
         }
 
+        function applyPipelineStatus(statusPayload) {
+            if (!statusPayload) {
+                return;
+            }
+
+            if (statusPayload.status === "running") {
+                elements.pipelineMessage.textContent = "Pipeline is running in the background. Dashboard data will refresh when it finishes.";
+                return;
+            }
+
+            if (statusPayload.status === "completed" && statusPayload.last_summary) {
+                elements.pipelineMessage.textContent = `Pipeline completed. Latest prediction date: ${statusPayload.last_summary.latest_prediction_date || "--"}`;
+                return;
+            }
+
+            if (statusPayload.status === "failed") {
+                elements.pipelineMessage.textContent = statusPayload.last_error || "Pipeline failed.";
+            }
+        }
+
         function updateSummaryCards(healthPayload, predictionPayload, insightsPayload, rows) {
             const latestFeatures = predictionPayload.latest_features || {};
             const predictionIsUp = predictionPayload.prediction === "UP";
@@ -700,10 +861,11 @@
             setStatusChip(elements.apiStatus, true, "API online", "API offline");
             setStatusChip(elements.modelStatus, Boolean(healthPayload.model_ready), "Model ready", "Model missing");
             setStatusChip(elements.dataStatus, Boolean(healthPayload.data_ready), "Data ready", "Data missing");
+            updateAdminUi(healthPayload);
 
             elements.predictionLabel.textContent = predictionPayload.prediction || "Unavailable";
             elements.predictionDate.textContent = predictionPayload.latest_row_date
-                ? `Latest session: ${predictionPayload.latest_row_date}`
+                ? `Latest session: ${predictionPayload.latest_row_date} | Confidence ${Math.round((predictionPayload.confidence || 0) * 100)}%`
                 : "Latest session unavailable";
             elements.predictionBadge.textContent = predictionIsUp ? "Bullish signal" : "Bearish signal";
             elements.predictionBadge.className = [
@@ -730,6 +892,12 @@
             if (Array.isArray(healthPayload.warnings) && healthPayload.warnings.length) {
                 elements.pipelineMessage.textContent = healthPayload.warnings[0];
             }
+
+            applyPipelineStatus({
+                status: healthPayload.pipeline_status,
+                running: healthPayload.pipeline_busy,
+                last_error: healthPayload.pipeline_error,
+            });
         }
 
         function openFileManager() {
@@ -758,8 +926,13 @@
         }
 
         async function loadFiles() {
+            if (!hasUsableAdminAccess()) {
+                elements.fileSections.innerHTML = `<p class="text-sm text-slate-300">Admin token required to browse managed files.</p>`;
+                return;
+            }
+
             try {
-                const payload = await fetchJson("/api/files");
+                const payload = await fetchAdminJson("/api/files");
                 renderFileSections(payload);
             } catch (error) {
                 console.error(error);
@@ -781,8 +954,8 @@
             `).join("");
 
             return `
-                <div class="data-scroll overflow-auto rounded-[1rem] border border-white/10">
-                    <table class="min-w-full bg-slate-950/30">
+                <div class="table-responsive data-scroll overflow-auto rounded-[1rem] border border-white/10">
+                    <table class="w-max min-w-full bg-slate-950/30">
                         <thead class="bg-white/5"><tr>${headerHtml}</tr></thead>
                         <tbody>${rowsHtml}</tbody>
                     </table>
@@ -793,7 +966,7 @@
         async function previewFile(category, filename) {
             try {
                 const query = new URLSearchParams({ category, filename });
-                const preview = await fetchJson(`/api/files/preview?${query.toString()}`);
+                const preview = await fetchAdminJson(`/api/files/preview?${query.toString()}`);
                 elements.previewTitle.textContent = preview.filename;
                 elements.previewMeta.textContent = preview.relative_path || "";
 
@@ -804,6 +977,7 @@
 
                 if (preview.preview_type === "pickle") {
                     const items = [
+                        preview.model_version ? `Model version: ${preview.model_version}` : "",
                         preview.keys ? `Keys: ${preview.keys.join(", ")}` : "",
                         preview.feature_columns ? `Feature columns: ${preview.feature_columns.join(", ")}` : "",
                         preview.metrics ? `Metrics: ${JSON.stringify(preview.metrics)}` : "",
@@ -811,6 +985,13 @@
                     elements.previewBody.innerHTML = items.map((item) => `
                         <div class="mb-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-200">${item}</div>
                     `).join("");
+                    return;
+                }
+
+                if (preview.preview_type === "json") {
+                    elements.previewBody.innerHTML = `
+                        <pre class="whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-slate-200">${JSON.stringify(preview.content || {}, null, 2)}</pre>
+                    `;
                     return;
                 }
 
@@ -830,7 +1011,7 @@
             }
 
             try {
-                await postJson("/api/files/delete", { category, filename });
+                await postAdminJson("/api/files/delete", { category, filename });
                 await loadFiles();
                 elements.previewTitle.textContent = "Select a file";
                 elements.previewMeta.textContent = "";
@@ -850,10 +1031,10 @@
                 const filesHtml = files.length
                     ? files.map((file) => `
                         <div class="rounded-[1rem] border border-white/10 bg-white/5 p-3">
-                            <div class="flex items-start justify-between gap-3">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <p class="truncate text-sm font-semibold text-white">${file.filename}</p>
-                                    <p class="mt-1 text-xs text-slate-400">${formatFileSize(file.size_bytes)} • ${file.modified_at}</p>
+                                    <p class="safe-wrap text-sm font-semibold text-white">${file.filename}</p>
+                                    <p class="safe-wrap mt-1 text-xs text-slate-400">${formatFileSize(file.size_bytes)} | ${file.modified_at}</p>
                                 </div>
                                 <span class="rounded-full border px-2.5 py-1 text-[10px] font-semibold ${file.can_delete ? "border-ember/20 bg-ember/10 text-amber-200" : "border-mint/20 bg-mint/10 text-emerald-200"}">
                                     ${file.can_delete ? "Archive" : "Protected"}
@@ -863,7 +1044,7 @@
                                 <button data-action="preview" data-category="${category}" data-filename="${file.filename}" class="rounded-lg border border-sky/20 bg-sky/10 px-3 py-1.5 text-xs font-semibold text-sky transition hover:bg-sky/20">
                                     View
                                 </button>
-                                ${file.can_delete ? `
+                                ${file.can_delete && hasUsableAdminAccess() ? `
                                     <button data-action="delete" data-category="${category}" data-filename="${file.filename}" class="rounded-lg border border-coral/20 bg-coral/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-coral/20">
                                         Delete
                                     </button>
@@ -899,19 +1080,51 @@
             });
         }
 
+        async function pollPipelineStatusUntilSettled() {
+            if (pipelinePollHandle) {
+                window.clearInterval(pipelinePollHandle);
+            }
+
+            pipelinePollHandle = window.setInterval(async () => {
+                try {
+                    const statusPayload = await fetchJson("/api/pipeline/status");
+                    applyPipelineStatus(statusPayload);
+
+                    if (statusPayload.status === "completed" || statusPayload.status === "failed") {
+                        window.clearInterval(pipelinePollHandle);
+                        pipelinePollHandle = null;
+                        await loadDashboard();
+                        if (elements.fileManagerModal.classList.contains("flex")) {
+                            await loadFiles();
+                        }
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
+            }, 4000);
+        }
+
         async function runPipeline() {
+            if (!hasUsableAdminAccess()) {
+                elements.pipelineMessage.textContent = "Admin token required before you can run the pipeline.";
+                return;
+            }
+
             try {
                 elements.runPipelineButton.disabled = true;
                 elements.runPipelineButton.classList.add("opacity-70");
-                elements.pipelineMessage.textContent = "Fetching live PSX data and rebuilding artifacts...";
-                const summary = await postJson("/api/pipeline/run");
-                elements.pipelineMessage.textContent = `Pipeline completed. Latest prediction date: ${summary.latest_prediction_date || "--"}`;
-                await Promise.all([loadDashboard(), loadFiles()]);
+                elements.pipelineMessage.textContent = "Queueing live data fetch and model rebuild...";
+                const response = await postAdminJson("/api/pipeline/run");
+                applyPipelineStatus(response.status);
+                await pollPipelineStatusUntilSettled();
             } catch (error) {
                 console.error(error);
+                if (error.message.includes("Unauthorized")) {
+                    setAdminToken("");
+                    updateAdminUi();
+                }
                 elements.pipelineMessage.textContent = error.message;
             } finally {
-                elements.runPipelineButton.disabled = false;
                 elements.runPipelineButton.classList.remove("opacity-70");
             }
         }
@@ -941,6 +1154,10 @@
                 elements.lastUpdated.textContent = formatLocalTimestamp();
                 setStatusChip(elements.apiStatus, true, "API online", "API offline");
                 secondsUntilRefresh = REFRESH_SECONDS;
+
+                if (healthPayload.pipeline_busy) {
+                    await pollPipelineStatusUntilSettled();
+                }
             } catch (error) {
                 console.error(error);
                 setStatusChip(elements.apiStatus, false, "API online", "API offline");
@@ -968,12 +1185,38 @@
             loadDashboard();
         });
 
+        elements.adminTokenButton.addEventListener("click", async () => {
+            if (getAdminToken()) {
+                const replaceToken = window.confirm("An admin token is already stored. Do you want to replace it?");
+                if (!replaceToken) {
+                    return;
+                }
+            }
+
+            const nextToken = window.prompt("Enter the admin token for protected actions.", getAdminToken());
+            if (nextToken === null) {
+                return;
+            }
+
+            setAdminToken(nextToken);
+            updateAdminUi();
+
+            if (elements.fileManagerModal.classList.contains("flex")) {
+                await loadFiles();
+            }
+        });
+
         elements.runPipelineButton.addEventListener("click", () => {
             secondsUntilRefresh = REFRESH_SECONDS;
             runPipeline();
         });
 
         elements.manageFilesButton.addEventListener("click", async () => {
+            if (!hasUsableAdminAccess()) {
+                elements.pipelineMessage.textContent = "Admin token required before file management is available.";
+                return;
+            }
+
             openFileManager();
             await loadFiles();
         });
@@ -986,9 +1229,11 @@
             }
         });
 
+        updateAdminUi();
         loadDashboard();
         tickRefreshCountdown();
         setInterval(tickRefreshCountdown, 1000);
     </script>
 </body>
 </html>
+

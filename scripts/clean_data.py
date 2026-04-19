@@ -60,7 +60,8 @@ def load_and_align_dataframe(file_path: str | Path) -> pd.DataFrame:
     if missing_columns:
         raise ValueError(f"Missing required columns in {file_path.name}: {', '.join(missing_columns)}")
 
-    return dataframe[REQUIRED_COLUMNS].copy()
+    ordered_columns = REQUIRED_COLUMNS + [column for column in dataframe.columns if column not in REQUIRED_COLUMNS]
+    return dataframe[ordered_columns].copy()
 
 
 def clean_data(
@@ -68,55 +69,51 @@ def clean_data(
     output_path: str | Path,
     history_path: str | Path | None = None,
     merged_output_path: str | Path | None = None,
-) -> pd.DataFrame | None:
-    try:
-        input_path = Path(input_path)
-        output_path = Path(output_path)
-        history_path = Path(history_path) if history_path else None
-        merged_output_path = Path(merged_output_path) if merged_output_path else None
+) -> pd.DataFrame:
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    history_path = Path(history_path) if history_path else None
+    merged_output_path = Path(merged_output_path) if merged_output_path else None
 
-        frames = []
-        if history_path:
-            frames.append(load_and_align_dataframe(history_path))
-        frames.append(load_and_align_dataframe(input_path))
+    frames = []
+    if history_path:
+        frames.append(load_and_align_dataframe(history_path))
+    frames.append(load_and_align_dataframe(input_path))
 
-        dataframe = pd.concat(frames, ignore_index=True)
+    dataframe = pd.concat(frames, ignore_index=True, sort=False)
 
-        for column in NUMERIC_COLUMNS:
-            cleaned_values = dataframe[column].astype(str).str.replace(",", "", regex=False).str.strip()
-            dataframe[column] = pd.to_numeric(cleaned_values, errors="coerce")
+    for column in NUMERIC_COLUMNS:
+        cleaned_values = dataframe[column].astype(str).str.replace(",", "", regex=False).str.strip()
+        dataframe[column] = pd.to_numeric(cleaned_values, errors="coerce")
 
-        dataframe["Date"] = parse_mixed_dates(dataframe["Date"])
+    dataframe["Date"] = parse_mixed_dates(dataframe["Date"])
 
-        invalid_rows = dataframe[dataframe[REQUIRED_COLUMNS].isna().any(axis=1)]
-        dropped_invalid_rows = len(invalid_rows)
-        if dropped_invalid_rows:
-            dataframe = dataframe.drop(index=invalid_rows.index)
+    invalid_rows = dataframe[dataframe[REQUIRED_COLUMNS].isna().any(axis=1)]
+    dropped_invalid_rows = len(invalid_rows)
+    if dropped_invalid_rows:
+        dataframe = dataframe.drop(index=invalid_rows.index)
 
-        if dataframe.empty:
-            raise ValueError("No valid rows remained after cleaning numeric and date values.")
+    if dataframe.empty:
+        raise ValueError("No valid rows remained after cleaning numeric and date values.")
 
-        duplicate_dates = int(dataframe.duplicated(subset=["Date"], keep="last").sum())
-        dataframe = dataframe.drop_duplicates(subset=["Date"], keep="last")
-        dataframe = dataframe.sort_values(by="Date").reset_index(drop=True)
+    duplicate_dates = int(dataframe.duplicated(subset=["Date"], keep="last").sum())
+    dataframe = dataframe.drop_duplicates(subset=["Date"], keep="last")
+    dataframe = dataframe.sort_values(by="Date").reset_index(drop=True)
 
-        serialized = dataframe.copy()
-        serialized["Date"] = serialized["Date"].dt.strftime("%Y-%m-%d")
+    serialized = dataframe.copy()
+    serialized["Date"] = serialized["Date"].dt.strftime("%Y-%m-%d")
 
-        if merged_output_path:
-            merged_output_path.parent.mkdir(parents=True, exist_ok=True)
-            serialized.to_csv(merged_output_path, index=False)
+    if merged_output_path:
+        merged_output_path.parent.mkdir(parents=True, exist_ok=True)
+        serialized.to_csv(merged_output_path, index=False)
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        serialized.to_csv(output_path, index=False)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    serialized.to_csv(output_path, index=False)
 
-        print("Cleaned data saved to:", output_path)
-        print("Rows dropped for invalid values:", dropped_invalid_rows)
-        print("Duplicate dates removed:", duplicate_dates)
-        return serialized
-    except Exception as error:
-        print(f"Error while cleaning data: {error}")
-        return None
+    serialized.attrs["rows_dropped_for_invalid_values"] = dropped_invalid_rows
+    serialized.attrs["duplicate_dates_removed"] = duplicate_dates
+    serialized.attrs["extra_columns"] = [column for column in serialized.columns if column not in REQUIRED_COLUMNS]
+    return serialized
 
 
 if __name__ == "__main__":

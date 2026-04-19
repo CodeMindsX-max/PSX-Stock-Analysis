@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+import logging
 import re
+import time
 
 import pandas as pd
 import requests
@@ -14,6 +16,7 @@ except ModuleNotFoundError:
     from pipeline_utils import LATEST_LIVE_RAW_PATH, build_archive_path, copy_file
 
 
+LOGGER = logging.getLogger(__name__)
 PSX_SOURCE_URL = "https://dps.psx.com.pk/"
 REQUEST_HEADERS = {
     "User-Agent": (
@@ -75,14 +78,21 @@ def extract_text_lines(html: str) -> list[str]:
 
 
 def find_label_value(lines: list[str], start_index: int, label: str) -> float:
-    for index in range(start_index, min(start_index + 30, len(lines) - 1)):
+    for index in range(start_index, min(start_index + 40, len(lines) - 1)):
         if lines[index] == label:
             return parse_number(lines[index + 1])
     raise FetchDataError(f"Could not find label '{label}' in the PSX response.")
 
 
+def find_optional_label_value(lines: list[str], start_index: int, label: str) -> float | None:
+    try:
+        return find_label_value(lines, start_index, label)
+    except FetchDataError:
+        return None
+
+
 def parse_as_of_timestamp(lines: list[str], start_index: int) -> tuple[datetime, int]:
-    for index in range(start_index, min(start_index + 20, len(lines))):
+    for index in range(start_index, min(start_index + 25, len(lines))):
         if lines[index].startswith("As of "):
             timestamp = datetime.strptime(lines[index].replace("As of ", ""), "%b %d, %Y %I:%M %p")
             return timestamp, index
@@ -107,7 +117,7 @@ def find_kse100_block_starts(lines: list[str]) -> list[int]:
         first_data_index = None
         for index in range(indices_header + 1, len(lines)):
             line = lines[index]
-            if line.startswith("As of ") or line in {"High", "Low", "Volume", "Previous Close"}:
+            if line.startswith("As of ") or line in {"High", "Low", "Volume", "Previous Close", "Open"}:
                 first_data_index = index
                 break
             if VALUE_LINE_PATTERN.match(line):
@@ -168,6 +178,7 @@ def validate_snapshot(record: dict[str, object]) -> None:
 def extract_kse100_snapshot_from_html(html: str) -> dict[str, object]:
     lines = extract_text_lines(html)
     block_starts = find_kse100_block_starts(lines)
+    parse_errors: list[str] = []
 
     for start_index in block_starts:
         try:
@@ -196,10 +207,11 @@ def extract_kse100_snapshot_from_html(html: str) -> dict[str, object]:
             low_value = find_label_value(lines, as_of_index, "Low")
             volume_value = find_label_value(lines, as_of_index, "Volume")
             previous_close = find_label_value(lines, as_of_index, "Previous Close")
+            open_value = find_optional_label_value(lines, as_of_index, "Open")
 
             record = {
                 "Date": as_of_timestamp.strftime("%d-%b-%y"),
-                "Open": round(previous_close, 2),
+                "Open": round(open_value if open_value is not None else previous_close, 2),
                 "High": round(high_value, 2),
                 "Low": round(low_value, 2),
                 "Close": round(current_value, 2),
@@ -209,14 +221,15 @@ def extract_kse100_snapshot_from_html(html: str) -> dict[str, object]:
                 "Change_Percent": round(change_percent, 2),
                 "Fetched_At": datetime.now().isoformat(timespec="seconds"),
                 "Source_URL": PSX_SOURCE_URL,
-                "Open_Source": "previous_close_proxy",
+                "Open_Source": "scraped" if open_value is not None else "previous_close_proxy",
             }
 
             validate_snapshot(record)
             return record
-        except (FetchDataError, ValueError, IndexError):
-            continue
+        except (FetchDataError, ValueError, IndexError) as error:
+            parse_errors.append(str(error))
 
+    LOGGER.error("Failed to parse KSE100 snapshot. Candidate errors: %s", parse_errors)
     raise FetchDataError("Could not locate a validated KSE100 block in the PSX HTML response.")
 
 
@@ -224,11 +237,26 @@ def fetch_data(
     output_path: str | Path | None = None,
     html: str | None = None,
     timeout: int = 30,
+    max_retries: int = 3,
+    retry_delay_seconds: float = 1.5,
 ) -> dict[str, object]:
     if html is None:
-        response = requests.get(PSX_SOURCE_URL, headers=REQUEST_HEADERS, timeout=timeout)
-        response.raise_for_status()
-        html = response.text
+        last_error: Exception | None = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                LOGGER.info("Fetching PSX market snapshot (attempt %s/%s)", attempt, max_retries)
+                response = requests.get(PSX_SOURCE_URL, headers=REQUEST_HEADERS, timeout=timeout)
+                response.raise_for_status()
+                html = response.text
+                break
+            except requests.RequestException as error:
+                last_error = error
+                LOGGER.warning("PSX fetch attempt %s failed: %s", attempt, error)
+                if attempt < max_retries:
+                    time.sleep(retry_delay_seconds * attempt)
+
+        if html is None:
+            raise FetchDataError(f"Could not fetch PSX data after {max_retries} attempts: {last_error}")
 
     record = extract_kse100_snapshot_from_html(html)
     dataframe = pd.DataFrame([record])
@@ -238,6 +266,9 @@ def fetch_data(
         saved_path = Path(output_path)
         saved_path.parent.mkdir(parents=True, exist_ok=True)
         dataframe.to_csv(saved_path, index=False)
+
+    if record.get("Open_Source") != "scraped":
+        LOGGER.warning("PSX open price was not available; previous close is being used as a proxy.")
 
     return {
         "record": record,
@@ -257,10 +288,11 @@ def fetch_and_store_live_snapshot() -> dict[str, object]:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
         result = fetch_and_store_live_snapshot()
-        print("Live PSX data fetched successfully.")
-        print("Archived raw file:", result["archive_path"])
-        print("Latest raw file:", result["latest_path"])
+        LOGGER.info("Live PSX data fetched successfully.")
+        LOGGER.info("Archived raw file: %s", result["archive_path"])
+        LOGGER.info("Latest raw file: %s", result["latest_path"])
     except Exception as error:
-        print(f"Error while fetching PSX data: {error}")
+        LOGGER.exception("Error while fetching PSX data: %s", error)

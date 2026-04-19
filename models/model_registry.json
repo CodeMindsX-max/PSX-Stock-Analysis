@@ -1,0 +1,279 @@
+[
+  {
+    "model_version": "20260419_123030",
+    "saved_at": "2026-04-19T07:30:30.277418+00:00",
+    "current_model_path": "D:\\Python Programs\\PSX Stock Analysis\\models\\model.pkl",
+    "versioned_model_path": "D:\\Python Programs\\PSX Stock Analysis\\models\\model_20260419_123030.pkl",
+    "featured_input_path": "D:\\Python Programs\\PSX Stock Analysis\\data\\processed\\featured_data.csv",
+    "feature_columns": [
+      "High",
+      "Low",
+      "Close",
+      "Volume",
+      "Return",
+      "MA_7",
+      "MA_30",
+      "Volatility",
+      "Day_Of_Week",
+      "Month",
+      "Days_Since_Last_Trade",
+      "RSI_14",
+      "EMA_12",
+      "EMA_26",
+      "MACD"
+    ],
+    "metrics": {
+      "holdout": {
+        "accuracy": 0.5383411580594679,
+        "precision": 0.5483091787439613,
+        "recall": 0.6776119402985075,
+        "f1": 0.6061415220293725,
+        "support": 639,
+        "confusion_matrix": [
+          [
+            117,
+            187
+          ],
+          [
+            108,
+            227
+          ]
+        ],
+        "train_rows": 2553,
+        "test_rows": 639,
+        "average_positive_probability": 0.5543699556196254
+      },
+      "walk_forward_average": {
+        "accuracy": 0.49812,
+        "precision": 0.618299,
+        "recall": 0.263845,
+        "f1": 0.293749
+      },
+      "walk_forward_folds": [
+        {
+          "accuracy": 0.4642857142857143,
+          "precision": 0.5681818181818182,
+          "recall": 0.0859106529209622,
+          "f1": 0.14925373134328357,
+          "support": 532,
+          "confusion_matrix": [
+            [
+              222,
+              19
+            ],
+            [
+              266,
+              25
+            ]
+          ],
+          "fold": 1,
+          "train_rows": 532,
+          "test_rows": 532
+        },
+        {
+          "accuracy": 0.39285714285714285,
+          "precision": 0.5416666666666666,
+          "recall": 0.04,
+          "f1": 0.07449856733524356,
+          "support": 532,
+          "confusion_matrix": [
+            [
+              196,
+              11
+            ],
+            [
+              312,
+              13
+            ]
+          ],
+          "fold": 2,
+          "train_rows": 1064,
+          "test_rows": 532
+        },
+        {
+          "accuracy": 0.5056390977443609,
+          "precision": 0.8125,
+          "recall": 0.047619047619047616,
+          "f1": 0.08996539792387544,
+          "support": 532,
+          "confusion_matrix": [
+            [
+              256,
+              3
+            ],
+            [
+              260,
+              13
+            ]
+          ],
+          "fold": 3,
+          "train_rows": 1596,
+          "test_rows": 532
+        },
+        {
+          "accuracy": 0.5657894736842105,
+          "precision": 0.5809128630705395,
+          "recall": 0.5185185185185185,
+          "f1": 0.547945205479452,
+          "support": 532,
+          "confusion_matrix": [
+            [
+              161,
+              101
+            ],
+            [
+              130,
+              140
+            ]
+          ],
+          "fold": 4,
+          "train_rows": 2128,
+          "test_rows": 532
+        },
+        {
+          "accuracy": 0.5620300751879699,
+          "precision": 0.5882352941176471,
+          "recall": 0.627177700348432,
+          "f1": 0.6070826306913997,
+          "support": 532,
+          "confusion_matrix": [
+            [
+              119,
+              126
+            ],
+            [
+              107,
+              180
+            ]
+          ],
+          "fold": 5,
+          "train_rows": 2660,
+          "test_rows": 532
+        }
+      ]
+    },
+    "data_profile": {
+      "total_rows": 3222,
+      "training_rows": 3192,
+      "feature_count": 15,
+      "latest_gap_days": 1879
+    },
+    "warnings": [
+      "Latest data gap is 1879 days. Refresh the historical baseline for more reliable live features."
+    ]
+  },
+  {
+    "model_version": "20260419_123056",
+    "saved_at": "2026-04-19T07:30:56.271358+00:00",
+    "current_model_path": "C:\\Users\\raoaf\\AppData\\Local\\Temp\\tmplmu_cltn\\model.pkl",
+    "versioned_model_path": "D:\\Python Programs\\PSX Stock Analysis\\models\\model_20260419_123056.pkl",
+    "featured_input_path": "C:\\Users\\raoaf\\AppData\\Local\\Temp\\tmplmu_cltn\\featured.csv",
+    "feature_columns": [
+      "High",
+      "Low",
+      "Close",
+      "Volume",
+      "Return",
+      "MA_7",
+      "MA_30",
+      "Volatility",
+      "Day_Of_Week",
+      "Month",
+      "Days_Since_Last_Trade",
+      "RSI_14",
+      "EMA_12",
+      "EMA_26",
+      "MACD"
+    ],
+    "metrics": {
+      "holdout": {
+        "accuracy": 0.8,
+        "precision": 1.0,
+        "recall": 0.6666666666666666,
+        "f1": 0.8,
+        "support": 5,
+        "confusion_matrix": [
+          [
+            2,
+            0
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "train_rows": 17,
+        "test_rows": 5,
+        "average_positive_probability": 0.4853052812879957
+      },
+      "walk_forward_average": {},
+      "walk_forward_folds": []
+    },
+    "data_profile": {
+      "total_rows": 52,
+      "training_rows": 22,
+      "feature_count": 15,
+      "latest_gap_days": 11
+    },
+    "warnings": [
+      "Latest data gap is 11 days. Refresh the historical baseline for more reliable live features."
+    ]
+  },
+  {
+    "model_version": "20260419_123123",
+    "saved_at": "2026-04-19T07:31:23.761052+00:00",
+    "current_model_path": "C:\\Users\\raoaf\\AppData\\Local\\Temp\\tmpiuv24l3w\\model.pkl",
+    "versioned_model_path": "D:\\Python Programs\\PSX Stock Analysis\\models\\model_20260419_123123.pkl",
+    "featured_input_path": "C:\\Users\\raoaf\\AppData\\Local\\Temp\\tmpiuv24l3w\\featured.csv",
+    "feature_columns": [
+      "High",
+      "Low",
+      "Close",
+      "Volume",
+      "Return",
+      "MA_7",
+      "MA_30",
+      "Volatility",
+      "Day_Of_Week",
+      "Month",
+      "Days_Since_Last_Trade",
+      "RSI_14",
+      "EMA_12",
+      "EMA_26",
+      "MACD"
+    ],
+    "metrics": {
+      "holdout": {
+        "accuracy": 0.8,
+        "precision": 1.0,
+        "recall": 0.6666666666666666,
+        "f1": 0.8,
+        "support": 5,
+        "confusion_matrix": [
+          [
+            2,
+            0
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "train_rows": 17,
+        "test_rows": 5,
+        "average_positive_probability": 0.4853052812879957
+      },
+      "walk_forward_average": {},
+      "walk_forward_folds": []
+    },
+    "data_profile": {
+      "total_rows": 52,
+      "training_rows": 22,
+      "feature_count": 15,
+      "latest_gap_days": 11
+    },
+    "warnings": [
+      "Latest data gap is 11 days. Refresh the historical baseline for more reliable live features."
+    ]
+  }
+]
