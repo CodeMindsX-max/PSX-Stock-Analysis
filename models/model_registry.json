@@ -275,5 +275,62 @@
     "warnings": [
       "Latest data gap is 11 days. Refresh the historical baseline for more reliable live features."
     ]
+  },
+  {
+    "model_version": "20260420_010455",
+    "saved_at": "2026-04-19T20:04:55.589266+00:00",
+    "current_model_path": "C:\\Users\\raoaf\\AppData\\Local\\Temp\\tmpxgck2tk8\\model.pkl",
+    "versioned_model_path": "D:\\Python Programs\\PSX Stock Analysis\\models\\model_20260420_010455.pkl",
+    "featured_input_path": "C:\\Users\\raoaf\\AppData\\Local\\Temp\\tmpxgck2tk8\\featured.csv",
+    "feature_columns": [
+      "High",
+      "Low",
+      "Close",
+      "Volume",
+      "Return",
+      "MA_7",
+      "MA_30",
+      "Volatility",
+      "Day_Of_Week",
+      "Month",
+      "Days_Since_Last_Trade",
+      "RSI_14",
+      "EMA_12",
+      "EMA_26",
+      "MACD"
+    ],
+    "metrics": {
+      "holdout": {
+        "accuracy": 0.8,
+        "precision": 1.0,
+        "recall": 0.6666666666666666,
+        "f1": 0.8,
+        "support": 5,
+        "confusion_matrix": [
+          [
+            2,
+            0
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "train_rows": 17,
+        "test_rows": 5,
+        "average_positive_probability": 0.4853052812879957
+      },
+      "walk_forward_average": {},
+      "walk_forward_folds": []
+    },
+    "data_profile": {
+      "total_rows": 52,
+      "training_rows": 22,
+      "feature_count": 15,
+      "latest_gap_days": 11
+    },
+    "warnings": [
+      "Latest data gap is 11 days. Refresh the historical baseline for more reliable live features."
+    ]
   }
 ]

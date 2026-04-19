@@ -498,6 +498,7 @@
             const hasToken = Boolean(getAdminToken());
             const canUseAdmin = adminConfigured && hasToken;
             const pipelineRunning = Boolean(latestHealthPayload?.pipeline_busy);
+            const pipelineSupported = latestHealthPayload?.pipeline_supported !== false;
 
             setStatusChip(
                 elements.adminStatus,
@@ -507,7 +508,7 @@
             );
 
             elements.adminTokenButton.textContent = hasToken ? "Update Token" : "Admin Access";
-            elements.runPipelineButton.disabled = !canUseAdmin || pipelineRunning;
+            elements.runPipelineButton.disabled = !canUseAdmin || pipelineRunning || !pipelineSupported;
             elements.manageFilesButton.disabled = !canUseAdmin;
             elements.refreshFilesButton.disabled = !canUseAdmin;
 
@@ -857,6 +858,7 @@
         function updateSummaryCards(healthPayload, predictionPayload, insightsPayload, rows) {
             const latestFeatures = predictionPayload.latest_features || {};
             const predictionIsUp = predictionPayload.prediction === "UP";
+            const predictionAvailable = predictionPayload.available !== false;
 
             setStatusChip(elements.apiStatus, true, "API online", "API offline");
             setStatusChip(elements.modelStatus, Boolean(healthPayload.model_ready), "Model ready", "Model missing");
@@ -866,11 +868,15 @@
             elements.predictionLabel.textContent = predictionPayload.prediction || "Unavailable";
             elements.predictionDate.textContent = predictionPayload.latest_row_date
                 ? `Latest session: ${predictionPayload.latest_row_date} | Confidence ${Math.round((predictionPayload.confidence || 0) * 100)}%`
-                : "Latest session unavailable";
-            elements.predictionBadge.textContent = predictionIsUp ? "Bullish signal" : "Bearish signal";
+                : (predictionPayload.message || "Latest session unavailable");
+            elements.predictionBadge.textContent = predictionAvailable
+                ? (predictionIsUp ? "Bullish signal" : "Bearish signal")
+                : "Prediction offline";
             elements.predictionBadge.className = [
                 "rounded-full border px-3 py-1.5 text-[11px] font-semibold",
-                predictionIsUp
+                !predictionAvailable
+                    ? "border-white/10 bg-white/5 text-slate-200"
+                    : predictionIsUp
                     ? "border-mint/20 bg-mint/10 text-emerald-200"
                     : "border-coral/20 bg-coral/10 text-rose-200",
             ].join(" ");
@@ -891,6 +897,10 @@
 
             if (Array.isArray(healthPayload.warnings) && healthPayload.warnings.length) {
                 elements.pipelineMessage.textContent = healthPayload.warnings[0];
+            }
+
+            if (!healthPayload.pipeline_supported) {
+                elements.pipelineMessage.textContent = "Pipeline execution is disabled on Vercel. Deploy prebuilt artifacts instead of training inside the serverless function.";
             }
 
             applyPipelineStatus({
@@ -1139,12 +1149,38 @@
             elements.refreshButton.classList.add("opacity-70");
 
             try {
-                const [healthPayload, predictionPayload, insightsPayload, rows] = await Promise.all([
+                const results = await Promise.allSettled([
                     fetchJson("/health"),
                     fetchJson("/predict"),
                     fetchJson("/insights"),
                     fetchJson("/data"),
                 ]);
+
+                if (results[0].status !== "fulfilled") {
+                    throw results[0].reason;
+                }
+
+                const healthPayload = results[0].value;
+                const predictionPayload = results[1].status === "fulfilled"
+                    ? results[1].value
+                    : {
+                        available: false,
+                        prediction: "Unavailable",
+                        prediction_value: null,
+                        prediction_probability_down: null,
+                        prediction_probability_up: null,
+                        confidence: null,
+                        model_version: null,
+                        latest_row_date: null,
+                        feature_columns: [],
+                        latest_features: {},
+                        warnings: [],
+                        message: results[1].reason?.message || "Prediction endpoint unavailable",
+                    };
+                const insightsPayload = results[2].status === "fulfilled"
+                    ? results[2].value
+                    : { average_return: null, average_volatility: null };
+                const rows = results[3].status === "fulfilled" ? results[3].value : [];
 
                 updateSummaryCards(healthPayload, predictionPayload, insightsPayload, rows);
                 renderSnapshotGrid(predictionPayload);

@@ -54,4 +54,5 @@ models/*
 !data/raw/market_history_current.csv
 !data/processed/cleaned_data.csv
 !data/processed/featured_data.csv
+!models/model.pkl
 !models/model_registry.json

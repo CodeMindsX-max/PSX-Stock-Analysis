@@ -25,6 +25,7 @@ LOGGER = logging.getLogger(__name__)
 
 app = Flask(__name__)
 ADMIN_TOKEN = os.getenv("PSX_ADMIN_TOKEN", "").strip()
+RUNNING_ON_VERCEL = os.getenv("VERCEL") == "1" or bool(os.getenv("VERCEL_ENV"))
 PIPELINE_LOCK = threading.Lock()
 CACHE_LOCK = threading.Lock()
 PIPELINE_STATE_LOCK = threading.Lock()
@@ -84,6 +85,16 @@ def has_admin_token_configured() -> bool:
     return bool(ADMIN_TOKEN)
 
 
+def pipeline_execution_supported() -> bool:
+    return not RUNNING_ON_VERCEL
+
+
+def should_bootstrap_runtime_state() -> bool:
+    if not RUNNING_ON_VERCEL:
+        return True
+    return os.getenv("PSX_ENABLE_VERCEL_BOOTSTRAP", "").strip() == "1"
+
+
 def require_admin_token(route_function):
     @functools.wraps(route_function)
     def wrapper(*args, **kwargs):
@@ -102,6 +113,11 @@ def require_admin_token(route_function):
 def load_model_bundle(force_reload: bool = False):
     model_path = resolve_active_model_path()
     if not model_path.exists():
+        if RUNNING_ON_VERCEL:
+            return None, (
+                "Model file not found in this Vercel deployment. "
+                "Deploy models/model.pkl with the repo or use external persistent storage."
+            )
         return None, "Model file not found. Run the pipeline first."
 
     try:
@@ -270,6 +286,9 @@ def run_pipeline_background_job() -> None:
 
 
 def start_pipeline_job():
+    if not pipeline_execution_supported():
+        return False
+
     if not PIPELINE_LOCK.acquire(blocking=False):
         return False
 
@@ -280,9 +299,13 @@ def start_pipeline_job():
 
 def bootstrap_runtime_state() -> None:
     try:
-        summary = bootstrap_local_artifacts()
-        if any(summary.values()):
-            LOGGER.info("Bootstrap summary: %s", summary)
+        if should_bootstrap_runtime_state():
+            summary = bootstrap_local_artifacts()
+            if any(summary.values()):
+                LOGGER.info("Bootstrap summary: %s", summary)
+        else:
+            LOGGER.info("Skipping heavy bootstrap on Vercel import.")
+
         refresh_runtime_cache(force_reload=True)
     except Exception as error:
         LOGGER.warning("Runtime bootstrap could not finish: %s", error)
@@ -303,11 +326,13 @@ def health():
 
     return jsonify({
         "message": "PSX AI API is running",
+        "deployment_target": "vercel" if RUNNING_ON_VERCEL else "standard",
         "model_ready": model_error is None,
         "data_ready": data_error is None,
         "model_error": model_error,
         "data_error": data_error,
         "pipeline_busy": pipeline_state["running"],
+        "pipeline_supported": pipeline_execution_supported(),
         "pipeline_status": pipeline_state["status"],
         "pipeline_started_at": pipeline_state["started_at"],
         "pipeline_finished_at": pipeline_state["finished_at"],
@@ -446,6 +471,12 @@ def api_delete_file():
 @app.route("/api/pipeline/run", methods=["POST"])
 @require_admin_token
 def api_run_pipeline():
+    if not pipeline_execution_supported():
+        return jsonify({
+            "error": "Pipeline execution is disabled on Vercel serverless deployments.",
+            "detail": "Run the training pipeline locally or on a dedicated worker environment, then deploy the generated artifacts.",
+        }), 501
+
     if not start_pipeline_job():
         return jsonify({"error": "Pipeline is already running.", "status": get_pipeline_state()}), 409
 

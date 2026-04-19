@@ -163,6 +163,41 @@ Suggested platforms:
 - Railway
 - Render
 - Heroku-style platforms that support Gunicorn and persistent volumes
+- Vercel for read-focused serverless deployment with prebuilt artifacts
+
+## Vercel Deployment Notes
+
+This project can deploy on Vercel, but it should be treated as a read-focused
+serverless deployment.
+
+Important points:
+
+- Vercel should serve the Flask app through `api/index.py`
+- serverless functions should not be used to run the full training pipeline
+- `models/model.pkl` should be committed or provided through persistent storage
+  if you want `/predict` to work immediately after deployment
+- `data/raw/Stock Exchange KSE 100(Pakistan).csv`
+- `data/raw/market_history_current.csv`
+- `data/processed/cleaned_data.csv`
+- `data/processed/featured_data.csv`
+- `models/model_registry.json`
+
+Recommended Vercel environment variables:
+
+- `PSX_ADMIN_TOKEN`
+
+Recommended deployment workflow:
+
+1. Run the pipeline locally or in a separate worker environment
+2. Ensure `models/model.pkl` is present
+3. Commit the required data/model artifacts
+4. Push to GitHub
+5. Deploy to Vercel
+
+Current Vercel limitation in this project:
+
+- `POST /api/pipeline/run` is intentionally disabled on Vercel because
+  long-running background training is not reliable inside a serverless request
 
 ## Testing
 
