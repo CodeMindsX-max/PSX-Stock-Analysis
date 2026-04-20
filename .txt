@@ -1,0 +1,13 @@
+So this is my project and you have analyze it completely, each and every file optimize it and handle every edge cases make script of every file robust so that it will be get ready to deply on vercel and there will no problem to achive this goal
+Beacause i faced problem like crashing while deploying or backend data don't fetch which results into empty UI so now you have all the access to code so make it deployable 
+
+Before deploying this program we created a web scrapping method in our project but its not working correctly
+Like it is just fetch the data from psx website but i don't want that 
+The scrapper should go on page where psx website provide download links for data
+
+
+
+
+okay you have my complete project files in root directory
+Now create master test case or implementation guide, which guide me to create this project from start like from the very first file what step should i take to create this project what should i implement first every should be there in sequence. So make a file which leads me an end to end full stack project and cover every functionality like which file to make which functionality should be cover in which step even it should have which enviroment and which function i have to make
+In short make complete use case which will be useful for developer to create the complete software more advance more robust and more perfect then this so it will be deployment ready in the end and can be deployed easily on vercel or railway
