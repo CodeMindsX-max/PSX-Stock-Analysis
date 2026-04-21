@@ -56,3 +56,6 @@ models/*
 !data/processed/featured_data.csv
 !models/model.pkl
 !models/model_registry.json
+
+
+EXTRAS
