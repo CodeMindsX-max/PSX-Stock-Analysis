@@ -24,7 +24,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 LOGGER = logging.getLogger(__name__)
 
 app = Flask(__name__)
-ADMIN_TOKEN = os.getenv("PSX_ADMIN_TOKEN", "").strip()
 RUNNING_ON_VERCEL = os.getenv("VERCEL") == "1" or bool(os.getenv("VERCEL_ENV"))
 PIPELINE_LOCK = threading.Lock()
 CACHE_LOCK = threading.Lock()
@@ -81,10 +80,6 @@ def update_pipeline_state(**updates) -> dict[str, object]:
         return dict(PIPELINE_STATE)
 
 
-def has_admin_token_configured() -> bool:
-    return bool(ADMIN_TOKEN)
-
-
 def pipeline_execution_supported() -> bool:
     return not RUNNING_ON_VERCEL
 
@@ -93,21 +88,6 @@ def should_bootstrap_runtime_state() -> bool:
     if not RUNNING_ON_VERCEL:
         return True
     return os.getenv("PSX_ENABLE_VERCEL_BOOTSTRAP", "").strip() == "1"
-
-
-def require_admin_token(route_function):
-    @functools.wraps(route_function)
-    def wrapper(*args, **kwargs):
-        if not has_admin_token_configured():
-            return jsonify({"error": "Admin token is not configured on the server."}), 503
-
-        provided_token = request.headers.get("X-Admin-Token", "").strip()
-        if provided_token != ADMIN_TOKEN:
-            return jsonify({"error": "Unauthorized admin request."}), 401
-
-        return route_function(*args, **kwargs)
-
-    return wrapper
 
 
 def load_model_bundle(force_reload: bool = False):
@@ -338,7 +318,6 @@ def health():
         "pipeline_finished_at": pipeline_state["finished_at"],
         "pipeline_error": pipeline_state["last_error"],
         "warnings": [] if model_error else (model_bundle.get("warnings") or []),
-        "admin_configured": has_admin_token_configured(),
     })
 
 
@@ -416,13 +395,11 @@ def insights():
 
 
 @app.route("/api/files", methods=["GET"])
-@require_admin_token
 def api_files():
     return jsonify(list_managed_files())
 
 
 @app.route("/api/files/preview", methods=["GET"])
-@require_admin_token
 def api_file_preview():
     category = request.args.get("category", "").strip()
     filename = request.args.get("filename", "").strip()
@@ -442,7 +419,6 @@ def api_file_preview():
 
 
 @app.route("/api/files/delete", methods=["POST"])
-@require_admin_token
 def api_delete_file():
     payload = request.get_json(silent=True) or {}
     category = str(payload.get("category", "")).strip()
@@ -469,7 +445,6 @@ def api_delete_file():
 
 
 @app.route("/api/pipeline/run", methods=["POST"])
-@require_admin_token
 def api_run_pipeline():
     if not pipeline_execution_supported():
         return jsonify({

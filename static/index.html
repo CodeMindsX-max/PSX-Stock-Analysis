@@ -196,7 +196,6 @@
                             <span id="apiStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">API status pending</span>
                             <span id="modelStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Model pending</span>
                             <span id="dataStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Data pending</span>
-                            <span id="adminStatus" class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">Admin locked</span>
                             <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300">Auto refresh 30s</span>
                         </div>
                     </div>
@@ -214,12 +213,9 @@
                             </div>
                         </div>
 
-                        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                             <button id="refreshButton" class="rounded-2xl border border-sky/20 bg-sky px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky/90">
                                 Refresh
-                            </button>
-                            <button id="adminTokenButton" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/10">
-                                Admin Access
                             </button>
                             <button id="runPipelineButton" class="rounded-2xl border border-mint/20 bg-mint/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-mint/20">
                                 Fetch Live
@@ -381,7 +377,6 @@
 
     <script>
         const REFRESH_SECONDS = 30;
-        const ADMIN_TOKEN_STORAGE_KEY = "psxAdminToken";
         let secondsUntilRefresh = REFRESH_SECONDS;
         let directionChart = null;
         let priceChart = null;
@@ -394,7 +389,6 @@
 
         const elements = {
             refreshButton: document.getElementById("refreshButton"),
-            adminTokenButton: document.getElementById("adminTokenButton"),
             runPipelineButton: document.getElementById("runPipelineButton"),
             manageFilesButton: document.getElementById("manageFilesButton"),
             closeFilesButton: document.getElementById("closeFilesButton"),
@@ -406,7 +400,6 @@
             apiStatus: document.getElementById("apiStatus"),
             modelStatus: document.getElementById("modelStatus"),
             dataStatus: document.getElementById("dataStatus"),
-            adminStatus: document.getElementById("adminStatus"),
             predictionLabel: document.getElementById("predictionLabel"),
             predictionDate: document.getElementById("predictionDate"),
             predictionBadge: document.getElementById("predictionBadge"),
@@ -470,54 +463,6 @@
             ].join(" ");
         }
 
-        function getAdminToken() {
-            return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
-        }
-
-        function setAdminToken(token) {
-            const normalizedToken = String(token || "").trim();
-            if (normalizedToken) {
-                window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, normalizedToken);
-            } else {
-                window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-            }
-        }
-
-        function getAdminHeaders() {
-            const token = getAdminToken();
-            return token ? { "X-Admin-Token": token } : {};
-        }
-
-        function hasUsableAdminAccess() {
-            return Boolean(latestHealthPayload?.admin_configured && getAdminToken());
-        }
-
-        function updateAdminUi(healthPayload = latestHealthPayload) {
-            latestHealthPayload = healthPayload || latestHealthPayload;
-            const adminConfigured = Boolean(latestHealthPayload?.admin_configured);
-            const hasToken = Boolean(getAdminToken());
-            const canUseAdmin = adminConfigured && hasToken;
-            const pipelineRunning = Boolean(latestHealthPayload?.pipeline_busy);
-            const pipelineSupported = latestHealthPayload?.pipeline_supported !== false;
-
-            setStatusChip(
-                elements.adminStatus,
-                canUseAdmin,
-                "Admin ready",
-                adminConfigured ? "Admin locked" : "Admin disabled"
-            );
-
-            elements.adminTokenButton.textContent = hasToken ? "Update Token" : "Admin Access";
-            elements.runPipelineButton.disabled = !canUseAdmin || pipelineRunning || !pipelineSupported;
-            elements.manageFilesButton.disabled = !canUseAdmin;
-            elements.refreshFilesButton.disabled = !canUseAdmin;
-
-            ["runPipelineButton", "manageFilesButton", "refreshFilesButton"].forEach((key) => {
-                elements[key].classList.toggle("opacity-50", elements[key].disabled);
-                elements[key].classList.toggle("cursor-not-allowed", elements[key].disabled);
-            });
-        }
-
         async function fetchJson(path, options = {}) {
             const response = await fetch(path, {
                 cache: "no-store",
@@ -551,26 +496,6 @@
             }
 
             return body;
-        }
-
-        async function fetchAdminJson(path, options = {}) {
-            return fetchJson(path, {
-                ...options,
-                headers: {
-                    ...getAdminHeaders(),
-                    ...(options.headers || {}),
-                },
-            });
-        }
-
-        async function postAdminJson(path, payload = {}, options = {}) {
-            return postJson(path, payload, {
-                ...options,
-                headers: {
-                    ...getAdminHeaders(),
-                    ...(options.headers || {}),
-                },
-            });
         }
 
         function buildTrendSeries(rows, predictionPayload) {
@@ -863,7 +788,6 @@
             setStatusChip(elements.apiStatus, true, "API online", "API offline");
             setStatusChip(elements.modelStatus, Boolean(healthPayload.model_ready), "Model ready", "Model missing");
             setStatusChip(elements.dataStatus, Boolean(healthPayload.data_ready), "Data ready", "Data missing");
-            updateAdminUi(healthPayload);
 
             elements.predictionLabel.textContent = predictionPayload.prediction || "Unavailable";
             elements.predictionDate.textContent = predictionPayload.latest_row_date
@@ -936,13 +860,8 @@
         }
 
         async function loadFiles() {
-            if (!hasUsableAdminAccess()) {
-                elements.fileSections.innerHTML = `<p class="text-sm text-slate-300">Admin token required to browse managed files.</p>`;
-                return;
-            }
-
             try {
-                const payload = await fetchAdminJson("/api/files");
+                const payload = await fetchJson("/api/files");
                 renderFileSections(payload);
             } catch (error) {
                 console.error(error);
@@ -976,7 +895,7 @@
         async function previewFile(category, filename) {
             try {
                 const query = new URLSearchParams({ category, filename });
-                const preview = await fetchAdminJson(`/api/files/preview?${query.toString()}`);
+                const preview = await fetchJson(`/api/files/preview?${query.toString()}`);
                 elements.previewTitle.textContent = preview.filename;
                 elements.previewMeta.textContent = preview.relative_path || "";
 
@@ -1021,7 +940,7 @@
             }
 
             try {
-                await postAdminJson("/api/files/delete", { category, filename });
+                await postJson("/api/files/delete", { category, filename });
                 await loadFiles();
                 elements.previewTitle.textContent = "Select a file";
                 elements.previewMeta.textContent = "";
@@ -1054,7 +973,7 @@
                                 <button data-action="preview" data-category="${category}" data-filename="${file.filename}" class="rounded-lg border border-sky/20 bg-sky/10 px-3 py-1.5 text-xs font-semibold text-sky transition hover:bg-sky/20">
                                     View
                                 </button>
-                                ${file.can_delete && hasUsableAdminAccess() ? `
+                                ${file.can_delete ? `
                                     <button data-action="delete" data-category="${category}" data-filename="${file.filename}" class="rounded-lg border border-coral/20 bg-coral/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-coral/20">
                                         Delete
                                     </button>
@@ -1115,24 +1034,15 @@
         }
 
         async function runPipeline() {
-            if (!hasUsableAdminAccess()) {
-                elements.pipelineMessage.textContent = "Admin token required before you can run the pipeline.";
-                return;
-            }
-
             try {
                 elements.runPipelineButton.disabled = true;
                 elements.runPipelineButton.classList.add("opacity-70");
                 elements.pipelineMessage.textContent = "Queueing live data fetch and model rebuild...";
-                const response = await postAdminJson("/api/pipeline/run");
+                const response = await postJson("/api/pipeline/run");
                 applyPipelineStatus(response.status);
                 await pollPipelineStatusUntilSettled();
             } catch (error) {
                 console.error(error);
-                if (error.message.includes("Unauthorized")) {
-                    setAdminToken("");
-                    updateAdminUi();
-                }
                 elements.pipelineMessage.textContent = error.message;
             } finally {
                 elements.runPipelineButton.classList.remove("opacity-70");
@@ -1221,38 +1131,12 @@
             loadDashboard();
         });
 
-        elements.adminTokenButton.addEventListener("click", async () => {
-            if (getAdminToken()) {
-                const replaceToken = window.confirm("An admin token is already stored. Do you want to replace it?");
-                if (!replaceToken) {
-                    return;
-                }
-            }
-
-            const nextToken = window.prompt("Enter the admin token for protected actions.", getAdminToken());
-            if (nextToken === null) {
-                return;
-            }
-
-            setAdminToken(nextToken);
-            updateAdminUi();
-
-            if (elements.fileManagerModal.classList.contains("flex")) {
-                await loadFiles();
-            }
-        });
-
         elements.runPipelineButton.addEventListener("click", () => {
             secondsUntilRefresh = REFRESH_SECONDS;
             runPipeline();
         });
 
         elements.manageFilesButton.addEventListener("click", async () => {
-            if (!hasUsableAdminAccess()) {
-                elements.pipelineMessage.textContent = "Admin token required before file management is available.";
-                return;
-            }
-
             openFileManager();
             await loadFiles();
         });
@@ -1265,7 +1149,6 @@
             }
         });
 
-        updateAdminUi();
         loadDashboard();
         tickRefreshCountdown();
         setInterval(tickRefreshCountdown, 1000);
